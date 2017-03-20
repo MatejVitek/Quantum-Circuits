@@ -1,5 +1,7 @@
 from main.circuit import *
 
+
+# This is circuit (5) from the paper
 if __name__ == '__main__':
 	c = Circuit(6)
 
@@ -18,10 +20,10 @@ if __name__ == '__main__':
 	x3 = X()
 	c.add(x3)
 
-	c.add_wires(c.input[0:2:2], cnot1.in_ports)
+	c.add_wires(c.input[0:3:2], cnot1.in_ports)
 	c.add_wires(cnot1.out_ports, (c.output[0], x1.in_ports[0]))
 
-	c.add_wires(c.input[1:3:2], cnot2.in_ports)
+	c.add_wires(c.input[1:4:2], cnot2.in_ports)
 	c.add_wires(cnot2.out_ports, (c.output[1], x2.in_ports[0]))
 
 	c.add_wires((x1.out_ports[0], x2.out_ports[0], c.input[4]), t.in_ports)

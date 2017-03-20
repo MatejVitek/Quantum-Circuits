@@ -34,6 +34,9 @@ class Circuit:
 		self.output = (InPort(self),) * size
 		self.gates = []
 
+	def __len__(self):
+		return len(self.input)
+
 	# Add component (gate or subcircuit - subcircuits are simply treated as gates everywhere else though)
 	def add(self, component):
 		self.gates.append(component)
@@ -49,8 +52,8 @@ class Circuit:
 		if to_port.parent not in self.gates and to_port.parent is not self:
 			raise RuntimeError("Cannot add wire: End point is not in this circuit.")
 
-		from_port.next = to_port
-		to_port.previous = from_port
+		from_port.out_wire = to_port
+		to_port.in_wire = from_port
 
 	# Helper method to create multiple wires at once
 	def add_wires(self, from_ports, to_ports):
@@ -70,15 +73,15 @@ class Circuit:
 		return (
 			all(port.out_wire is not None for port in self.input) and
 			all(port.in_wire is not None for port in self.output) and
-			all(port.in_wire is not None for gate in self.gates for port in gate.input) and
-			all(port.out_wire is not None for gate in self.gates for port in gate.output)
+			all(port.in_wire is not None for gate in self.gates for port in gate.in_ports) and
+			all(port.out_wire is not None for gate in self.gates for port in gate.out_ports)
 		)
 		# TODO: Check that there are no cycles
 		# TODO: Possibly other checks
 
 	# Set the input vector of the circuit and propagate the values to the first gates
 	def set_input(self, in_v):
-		if len(in_v) != len(self.input):
+		if len(in_v) != len(self):
 			raise RuntimeError("Cannot set input vector: Vector lengths do not match.")
 		# TODO: check that sum(|x|^2 for x in in_v) = 1
 
@@ -125,6 +128,9 @@ class Gate(abc.ABC):
 		self.out_ports = (OutPort(self),) * size
 		self.name = name
 
+	def __len__(self):
+		return len(self.in_ports)
+
 	# Take the values that were propagated to this gate, compute the output and propagate computed values forward
 	def compute(self):
 		in_v = self._get_input_vector()
@@ -144,7 +150,7 @@ class Gate(abc.ABC):
 
 	# Set the output vector and propagate the values forward to the next gate (or circuit output)
 	def _set_output_vector(self, out_v):
-		if len(out_v) != len(self.in_ports):
+		if len(out_v) != len(self):
 			raise RuntimeError("Cannot set output vector: Vector lengths do not match.")
 
 		for i in range(len(out_v)):
@@ -155,7 +161,7 @@ class Gate(abc.ABC):
 
 			# Propagate value
 			if port.out_wire is None:
-				raise RuntimeError("Cannot propagate input vector: Port " + str(i) + " is not connected.")
+				raise RuntimeError("Cannot propagate output vector: Port " + str(i) + " is not connected.")
 			port.out_wire.value = out_v[i]
 
 	def draw(self):
@@ -236,16 +242,18 @@ class T(Gate):
 
 # This class is magic, probably doesn't work yet
 class SubCircuit(Gate, Circuit):
-	def __init__(self, size, name=None, circuit=None):
+	def __init__(self, size, name=None):
 		if name is None:
-			name = ''.join(random.choice(string.ascii_uppercase) for _ in range(2))
+			name = ''.join(random.choices(string.ascii_uppercase, k=3))
 		Gate.__init__(self, size, name)
 		Circuit.__init__(self, size)
 
-		if circuit is not None:
-			self.gates = circuit.gates
-			self.input = circuit.input
-			self.output = circuit.output
+	@classmethod
+	def from_circuit(cls, circuit, name):
+		self = cls(len(circuit), name)
+		for k, v in circuit.__dict__.items():
+			setattr(self, k, v)
+		return self
 
 	def _compute_output_vector(self, in_v):
 		return self.run(in_v)
