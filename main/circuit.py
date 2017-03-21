@@ -1,6 +1,7 @@
 import abc
 import random
 import string
+from collections import Counter
 
 
 # Abstract base class for ports
@@ -25,14 +26,17 @@ class OutPort(Port):
 
 
 # Class for the entire circuit
-class Circuit:
+class Circuit(object):
 
 	# The input ports of the circuit are OutPorts (since they have outbound connections to the gates)
 	# The output ports of the circuit are InPorts (since they have inbound connections from the gates)
 	def __init__(self, size):
-		self.input = (OutPort(self),) * size
-		self.output = (InPort(self),) * size
+		self.input = tuple(OutPort(self) for _ in range(size))
+		self.output = tuple(InPort(self) for _ in range(size))
 		self.gates = []
+
+		self.global_id = 0
+		self.cls_ids = Counter()
 
 	def __len__(self):
 		return len(self.input)
@@ -40,6 +44,17 @@ class Circuit:
 	# Add component (gate or subcircuit - subcircuits are simply treated as gates everywhere else though)
 	def add(self, component):
 		self.gates.append(component)
+		if component.parent is not None:
+			raise RuntimeError("Component is already added to a circuit.")
+		self.cls_ids[component.name] += 1
+		component.set_parent(self)
+		self.global_id += 1
+
+	# Add gate of type t and return the gate instance. Additional arguments will be passed to the constructor.
+	def add_gate(self, t, *args):
+		gate = t(*args)
+		self.add(gate)
+		return gate
 
 	# Create a wire from an OutPort to an InPort
 	def add_wire(self, from_port, to_port):
@@ -108,9 +123,11 @@ class Circuit:
 
 		# TODO: Compute output vector using the gates' compute functions
 		# for example:
-		# self.sort() (once sort is implemented)
-		# for gate in self.gates:
-		# 	gate.compute()
+		##################################################################
+		self.sort() # (once sort is implemented)
+		for gate in self.gates:
+			gate.compute()
+		##################################################################
 
 		# The output vector will be set automatically as the gates propagate the values in their compute functions
 		return self.get_output()
@@ -124,25 +141,41 @@ class Circuit:
 # Abstract base class for gates
 class Gate(abc.ABC):
 	def __init__(self, size, name=None):
-		self.in_ports = (InPort(self),) * size
-		self.out_ports = (OutPort(self),) * size
+		self.in_ports = tuple(InPort(self) for _ in range(size))
+		self.out_ports = tuple(OutPort(self) for _ in range(size))
 		self.name = name
+
+		self.parent = None
+		self.uuid = None
+		self.id = None
 
 	def __len__(self):
 		return len(self.in_ports)
+
+	def __str__(self):
+		s = self.name
+		if self.parent is not None and self.parent.cls_ids[self.name] > 1:
+			s += str(self.id)
+		return s
+
+	# Sets the gate's parent (the circuit it belongs to) and its ID numbers
+	def set_parent(self, parent):
+		self.parent = parent
+		self.uuid = parent.global_id
+		self.id = parent.cls_ids[self.name]
 
 	# Take the values that were propagated to this gate, compute the output and propagate computed values forward
 	def compute(self):
 		in_v = self._get_input_vector()
 		if any(i is None for i in in_v):
-			raise RuntimeError("Cannot compute: Inputs not set.")
+			raise RuntimeError(str(self) + ": Cannot compute: Inputs not set.")
 		out_v = self._compute_output_vector(in_v)
 		self._set_output_vector(out_v)
 
 	# This method is where the output vector is computed - all subclasses need to implement this
 	@abc.abstractmethod
 	def _compute_output_vector(self, in_v):
-		raise NotImplementedError("_compute_output_vector")
+		raise NotImplementedError("Gate._compute_output_vector()")
 
 	# Return the input values that were propagated to this gate
 	def _get_input_vector(self):
@@ -151,7 +184,7 @@ class Gate(abc.ABC):
 	# Set the output vector and propagate the values forward to the next gate (or circuit output)
 	def _set_output_vector(self, out_v):
 		if len(out_v) != len(self):
-			raise RuntimeError("Cannot set output vector: Vector lengths do not match.")
+			raise RuntimeError(str(self) + ": Cannot set output vector: Vector lengths do not match.")
 
 		for i in range(len(out_v)):
 			port = self.out_ports[i]
@@ -161,7 +194,7 @@ class Gate(abc.ABC):
 
 			# Propagate value
 			if port.out_wire is None:
-				raise RuntimeError("Cannot propagate output vector: Port " + str(i) + " is not connected.")
+				raise RuntimeError(str(self) + ": Cannot propagate output vector: Port " + str(i) + " is not connected.")
 			port.out_wire.value = out_v[i]
 
 	def draw(self):
@@ -212,7 +245,7 @@ class H(Gate):
 
 class CNot(Gate):
 	def __init__(self):
-		super().__init__(2)
+		super().__init__(2, "CNot")
 
 	def _compute_output_vector(self, in_v):
 		# TODO: compute output vector
@@ -227,7 +260,7 @@ class CNot(Gate):
 
 class T(Gate):
 	def __init__(self):
-		super().__init__(3)
+		super().__init__(3, "T")
 
 	def _compute_output_vector(self, in_v):
 		# TODO: compute output vector
@@ -251,8 +284,7 @@ class SubCircuit(Gate, Circuit):
 	@classmethod
 	def from_circuit(cls, circuit, name):
 		self = cls(len(circuit), name)
-		for k, v in circuit.__dict__.items():
-			setattr(self, k, v)
+		self.__dict__.update(circuit.__dict__)
 		return self
 
 	def _compute_output_vector(self, in_v):
