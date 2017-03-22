@@ -34,6 +34,7 @@ class Circuit(object):
 		self.input = tuple(OutPort(self) for _ in range(size))
 		self.output = tuple(InPort(self) for _ in range(size))
 		self.gates = []
+		self.ordered_gates=[]
 
 		self.global_id = 0
 		self.cls_ids = Counter()
