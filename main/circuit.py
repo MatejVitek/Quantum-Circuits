@@ -74,13 +74,33 @@ class Circuit(object):
 	def add_wires(self, from_ports, to_ports):
 		for w1, w2 in zip(from_ports, to_ports):
 			self.add_wire(w1, w2)
+			
+	# Helper function fot the topological sort
+	def visit(self, gate):
+		if gate.tempmarked:
+			raise RuntimeError("Cannot sort - the circuit contains a cycle.")
+		if not gate.marked:
+			gate.tempmarked=True
+			for gate1 in gate.out_ports:
+				if gate1.out_wire.parent != self:
+					self.visit(gate1.out_wire.parent)
+										
+			gate.marked=True
+			gate.tempmarked=False
+			self.ordered_gates.insert(0,gate)
 
 	# Topological sort of the gate list
 	def sort(self):
 		if not self.check():
 			raise RuntimeError("Cannot sort - please finish building the circuit first.")
+			
+		for gate in self.gates:
+			if not gate.marked:
+				self.visit(gate)
+				
+		self.gates=self.ordered_gates
+		self.ordered_gates=[]
 
-		# TODO: Topologically sort the gate list - if it cannot be sorted, raise error
 		pass
 
 	# Check the circuit is a proper quantum circuit
@@ -91,7 +111,7 @@ class Circuit(object):
 			all(port.in_wire is not None for gate in self.gates for port in gate.in_ports) and
 			all(port.out_wire is not None for gate in self.gates for port in gate.out_ports)
 		)
-		# TODO: Check that there are no cycles
+		# TODO: Check that there are no cycles - this check is a part of the topological sort
 		# TODO: Possibly other checks
 
 	# Set the input vector of the circuit and propagate the values to the first gates
@@ -144,6 +164,9 @@ class Gate(abc.ABC):
 		self.in_ports = tuple(InPort(self) for _ in range(size))
 		self.out_ports = tuple(OutPort(self) for _ in range(size))
 		self.name = name
+		
+		self.marked=False
+		self.tempmarked=False
 
 		self.parent = None
 		self.uuid = None
