@@ -4,43 +4,39 @@ import string
 from collections import Counter
 
 
-# Abstract base class for ports
-class Port(abc.ABC):
-	def __init__(self, parent):
+# Wire class
+class Wire(object):
+
+	# Uses left and right to avoid confusion with input/output
+	def __init__(self, left, right):
+		self.left = left
+		self.right = right
 		self.value = None
-		self.parent = parent
 
+	def __str__(self):
+		return str(self.left) + " --> " + str(self.right)
 
-# Port for an inbound connection
-class InPort(Port):
-	def __init__(self, parent):
-		super().__init__(parent)
-		self.in_wire = None
-
-
-# Port for an outbound connection
-class OutPort(Port):
-	def __init__(self, parent):
-		super().__init__(parent)
-		self.out_wire = None
+	def is_internal(self):
+		return isinstance(self.left, Gate) and isinstance(self.right, Gate)
 
 
 # Class for the entire circuit
 class Circuit(object):
-
-	# The input ports of the circuit are OutPorts (since they have outbound connections to the gates)
-	# The output ports of the circuit are InPorts (since they have inbound connections from the gates)
 	def __init__(self, size):
-		self.input = tuple(OutPort(self) for _ in range(size))
-		self.output = tuple(InPort(self) for _ in range(size))
+		self.input = [None] * size
+		self.output = [None] * size
 		self.gates = []
-		self.ordered_gates=[]
+		self.ordered_gates = []
+		self.wires = []
 
 		self.global_id = 0
 		self.cls_ids = Counter()
 
 	def __len__(self):
 		return len(self.input)
+
+	def __str__(self):
+		return "C"
 
 	# Add component (gate or subcircuit - subcircuits are simply treated as gates everywhere else though)
 	def add(self, component):
@@ -57,38 +53,58 @@ class Circuit(object):
 		self.add(gate)
 		return gate
 
-	# Create a wire from an OutPort to an InPort
-	def add_wire(self, from_port, to_port):
-		if not isinstance(from_port, OutPort):
-			raise RuntimeError("Cannot add wire: Start point is not an outbound port.")
-		if not isinstance(to_port, InPort):
-			raise RuntimeError("Cannot add wire: End point is not an inbound port.")
-		if from_port.parent not in self.gates and from_port.parent is not self:
-			raise RuntimeError("Cannot add wire: Start point is not in this circuit.")
-		if to_port.parent not in self.gates and to_port.parent is not self:
-			raise RuntimeError("Cannot add wire: End point is not in this circuit.")
+	# Create a wire from from_port-th output port of from_component to to_port-th input port of to_component
+	def add_wire(self, from_component, from_port, to_component, to_port):
+		# Error checking
+		if from_component not in self.gates and from_component is not self:
+			raise RuntimeError("Cannot add wire: Start point is not a valid component.")
+		if to_component not in self.gates and to_component is not self:
+			raise RuntimeError("Cannot add wire: End point is not a valid component.")
+		if from_port >= len(from_component):
+			raise RuntimeError("Cannot add wire: {0} does not have {1} output ports.".format(from_component, from_port+1))
+		if to_port >= len(to_component):
+			raise RuntimeError("Cannot add wire: {0} does not have {1} input ports.".format(to_component, to_port+1))
 
-		from_port.out_wire = to_port
-		to_port.in_wire = from_port
+		# Add wire to the circuit
+		w = Wire(from_component, to_component)
+		self.wires.append(w)
+
+		# Add left and right component information to the wire
+		# This differs slightly depending on whether the components are gates or the main circuit
+		from_ports = from_component.out_wires if isinstance(from_component, Gate) else from_component.input
+		to_ports = to_component.in_wires if isinstance(to_component, Gate) else to_component.output
+		from_ports[from_port] = w
+		to_ports[to_port] = w
 
 	# Helper method to create multiple wires at once
-	def add_wires(self, from_ports, to_ports):
-		for w1, w2 in zip(from_ports, to_ports):
-			self.add_wire(w1, w2)
+	# If from_ports or to_ports are empty, they default to all ports of the respective component
+	def add_wires(self, from_component, from_ports, to_component, to_ports):
+		if from_ports == 'all' or len(from_ports) == 0:
+			from_ports = tuple(i for i in range(len(from_component)))
+		if to_ports == 'all' or len(to_ports) == 0:
+			to_ports = tuple(i for i in range(len(to_component)))
+		if len(from_ports) != len(to_ports):
+			raise RuntimeError("Cannot add wires: Number of output ports does not match number of input ports.")
+
+		for p1, p2 in zip(from_ports, to_ports):
+			self.add_wire(from_component, p1, to_component, p2)
+
+	def get_internal_wires(self):
+		return [wire for wire in self.wires if wire.is_internal()]
 			
 	# Helper function fot the topological sort
 	def visit(self, gate):
 		if gate.tempmarked:
 			raise RuntimeError("Cannot sort - the circuit contains a cycle.")
 		if not gate.marked:
-			gate.tempmarked=True
-			for gate1 in gate.out_ports:
-				if gate1.out_wire.parent != self:
-					self.visit(gate1.out_wire.parent)
-										
-			gate.marked=True
-			gate.tempmarked=False
-			self.ordered_gates.insert(0,gate)
+			gate.tempmarked = True
+			for wire in gate.out_wires:
+				if wire.right is not self:
+					self.visit(wire.right)
+
+			gate.marked = True
+			gate.tempmarked = False
+			self.ordered_gates.insert(0, gate)
 
 	# Topological sort of the gate list
 	def sort(self):
@@ -99,42 +115,31 @@ class Circuit(object):
 			if not gate.marked:
 				self.visit(gate)
 				
-		self.gates=self.ordered_gates
-		self.ordered_gates=[]
-
-		pass
+		self.gates = self.ordered_gates
+		self.ordered_gates = []
 
 	# Check the circuit is a proper quantum circuit
 	def check(self):
 		return (
-			all(port.out_wire is not None for port in self.input) and
-			all(port.in_wire is not None for port in self.output) and
-			all(port.in_wire is not None for gate in self.gates for port in gate.in_ports) and
-			all(port.out_wire is not None for gate in self.gates for port in gate.out_ports)
+			all(wire is not None for wire in self.input) and
+			all(wire is not None for wire in self.output) and
+			all(wire is not None for gate in self.gates for wire in gate.in_wires) and
+			all(wire is not None for gate in self.gates for wire in gate.out_wires)
 		)
-		# TODO: Check that there are no cycles - this check is a part of the topological sort
 		# TODO: Possibly other checks
 
-	# Set the input vector of the circuit and propagate the values to the first gates
+	# Set the input vector of the circuit
 	def set_input(self, in_v):
 		if len(in_v) != len(self):
 			raise RuntimeError("Cannot set input vector: Vector lengths do not match.")
 		# TODO: check that sum(|x|^2 for x in in_v) = 1
 
 		for i in range(len(in_v)):
-			port = self.input[i]
-
-			# Set value
-			port.value = in_v[i]
-
-			# Propagate value
-			if port.out_wire is None:
-				raise RuntimeError("Cannot propagate input vector: Port " + str(i) + " is not connected.")
-			port.out_wire.value = in_v[i]
+			self.input[i].value = in_v[i]
 
 	# Return the output vector as computed by the last call to run (will return Nones if executed before any run calls)
 	def get_output(self):
-		return [port.value for port in self.output]
+		return [wire.value for wire in self.output]
 
 	# Run the circuit and return the computed output vector
 	# If in_v is provided, will first set the input vector, otherwise it assumes the vector is set already
@@ -145,12 +150,11 @@ class Circuit(object):
 		# TODO: Compute output vector using the gates' compute functions
 		# for example:
 		##################################################################
-		self.sort() # (once sort is implemented)
+		self.sort()  # (once sort is implemented)
 		for gate in self.gates:
 			gate.compute()
 		##################################################################
 
-		# The output vector will be set automatically as the gates propagate the values in their compute functions
 		return self.get_output()
 
 	# Draw a very basic, simple picture of the circuit. Assumes everything is properly set up.
@@ -161,9 +165,9 @@ class Circuit(object):
 
 # Abstract base class for gates
 class Gate(abc.ABC):
-	def __init__(self, size, name=None):
-		self.in_ports = tuple(InPort(self) for _ in range(size))
-		self.out_ports = tuple(OutPort(self) for _ in range(size))
+	def __init__(self, size, name):
+		self.in_wires = [None] * size
+		self.out_wires = [None] * size
 		self.name = name
 		
 		self.marked=False
@@ -174,7 +178,7 @@ class Gate(abc.ABC):
 		self.id = None
 
 	def __len__(self):
-		return len(self.in_ports)
+		return len(self.in_wires)
 
 	def __str__(self):
 		s = self.name
@@ -188,7 +192,7 @@ class Gate(abc.ABC):
 		self.uuid = parent.global_id
 		self.id = parent.cls_ids[self.name]
 
-	# Take the values that were propagated to this gate, compute the output and propagate computed values forward
+	# Take the values on the input wires, compute the output and set the output wires to the computed values
 	def compute(self):
 		in_v = self._get_input_vector()
 		if any(i is None for i in in_v):
@@ -201,25 +205,17 @@ class Gate(abc.ABC):
 	def _compute_output_vector(self, in_v):
 		raise NotImplementedError("Gate._compute_output_vector()")
 
-	# Return the input values that were propagated to this gate
+	# Return the vector of values on input wires
 	def _get_input_vector(self):
-		return [port.value for port in self.in_ports]
+		return [wire.value for wire in self.in_wires]
 
-	# Set the output vector and propagate the values forward to the next gate (or circuit output)
+	# Set the output wires to the values of out_v
 	def _set_output_vector(self, out_v):
 		if len(out_v) != len(self):
 			raise RuntimeError(str(self) + ": Cannot set output vector: Vector lengths do not match.")
 
 		for i in range(len(out_v)):
-			port = self.out_ports[i]
-
-			# Set value
-			port.value = out_v[i]
-
-			# Propagate value
-			if port.out_wire is None:
-				raise RuntimeError(str(self) + ": Cannot propagate output vector: Port " + str(i) + " is not connected.")
-			port.out_wire.value = out_v[i]
+			self.out_wires[i].value = out_v[i]
 
 	def draw(self):
 		# TODO (Matej): implement
