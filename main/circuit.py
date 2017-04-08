@@ -51,6 +51,7 @@ class Circuit(object):
         self.cls_ids[component.name] += 1
         component.set_parent(self)
         self.global_id += 1
+        return component
 
     # Add gate of type t and return the gate instance. Additional arguments will be passed to the constructor.
     def add_gate(self, t, *args):
@@ -150,7 +151,6 @@ class Circuit(object):
         for i in range(len(self)):
             (self.input[i]).value=in_v[i]
             
-        states=[]
         weights=[]
         int_wires=self.get_internal_wires()
             
@@ -161,6 +161,7 @@ class Circuit(object):
                 (self.output[i]).value=out[i]
             
             for assign in product(range(2),repeat=len(int_wires)):
+                assign=list(assign)
                 for i in range(len(int_wires)):
                     (int_wires[i]).value=assign[i]
                 
@@ -174,10 +175,9 @@ class Circuit(object):
                     
                 Sum+=prod
                 
-            weights.append(abs(Sum))
-            states.append(list(out))
+            weights.append((abs(Sum))**2)
  
-        return choices(states, weights)[0]
+        return weights
     
     #method2 is the matrix multiplication approach
     def run_method2(self, in_v):
@@ -192,6 +192,7 @@ class Circuit(object):
                 raise RuntimeError("Invalid input - values must be 0 or 1.")
             
         states=[]
+        weights=[]
         for i in in_v:
             if i==0:
                 states.append(Matrix.vector([1,0]))
@@ -203,38 +204,59 @@ class Circuit(object):
         else:
             states=states[0]
                 
-        for gate in self.gates:
-            startqbits=[self.startqbit(gate,i) for i in range(len(gate))]
+        for g_i in range(len(self.gates)):
+            gate=self.gates[g_i]
+            startqbits=[self.startqbit(g_i,i) for i in range(len(gate))]
             matrices=[]
-            tempmatrices=[]
-            result=Matrix.Id(2**(len(self)))
-            for i, j in zip(range(len(gate)),startqbits):
+            #this only searches for transpositions. If there is time should find a general way to find only one
+            #permutation to optimize this
+            for i in range(len(gate)):
+                permutation=[i for i in range(len(self))]
+                j=startqbits[i]
                 if i!=j:
-                    matrices.insert(0,Matrix.Swap(i,j,len(self)))
-                    tempmatrices.append(Matrix.Swap(i,j,len(self)))
+                    permutation[i]=j
+                    permutation[j]=i         
+                    matrices.append(Matrix.Permutation(permutation))
 
             if len(self)-len(gate)==0:
-                matrices.insert(0,gate.matrix)
+                M=gate.matrix
             else:
-                matrices.insert(0,tensor([gate.matrix,Matrix.Id(2**(len(self)-len(gate)))]))
-            matrices=tempmatrices+matrices 
-            for M in matrices:
-                result=result*M
-
-            states=result*states        
+                M=tensor([gate.matrix,Matrix.Id(2**(len(self)-len(gate)))])
+            
+            states=states.apply(matrices)
+            states=M*states
+            matrices.reverse()
+            states=states.apply(matrices)
               
-        measured=states.untensor()
-        output=[]
-        for x in measured:
-            if x==Matrix.vector([1,0]):
-                output.append(0)
-            elif x==Matrix.vector([0,1]):
-                output.append(1)
+        for x in range(len(states)):
+            weights.append((abs(states[x][0]))**2)
 
-        return output
+        return weights
+    
+    #this is the method that should be used for running the circuit. It only performs the computation once and then
+    #makes times probabalistic choices according to a distribution given by weights
+    def run(self,in_v,method,times):
+        results=[]
+        
+        if method==1:
+            weights=self.run_method1(in_v)
+        elif method==2:
+            weights=self.run_method2(in_v)
+        else:
+            raise RuntimeError("Please choose one of the avalible methods: 1 or 2")
+            
+        states=[]
+        for out in product(range(2),repeat=len(self)):
+            states.append(list(out))
+            
+        for i in range(times):
+            results.append(choices(states, weights)[0])
+            
+        return results
     
     #these are helper methods that give the input/output index of a given qbit
-    def endqbit(self, gate, outwire_index):
+    def endqbit(self, gate_index, outwire_index):
+        gate=self.gates[gate_index]
         j=outwire_index
         wire=gate.out_wires[j]
         while gate.out_wires[j].right != self:
@@ -244,7 +266,8 @@ class Circuit(object):
         
         return wire.rind
     
-    def startqbit(self, gate, inwire_index):
+    def startqbit(self, gate_index, inwire_index):
+        gate=self.gates[gate_index]
         j=inwire_index
         wire=gate.in_wires[j]
         while gate.in_wires[j].left != self:
@@ -317,8 +340,8 @@ class Z(Gate):
         super().__init__(Matrix.Z(), "Z")
 
 class H(Gate):
-    def __init__(self):
-        super().__init__(Matrix.H(), "H")
+    def __init__(self,size=1):
+        super().__init__(Matrix.H(size), "H")
 
 class CNot(Gate):
     def __init__(self):

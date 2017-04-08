@@ -1,4 +1,5 @@
 import cmath
+from itertools import product
 
 #this is a helpful external function that computes the tensor product of a list of matrices
 #in the order given by the list
@@ -8,6 +9,13 @@ def tensor(matrixlist):
         T=T.bintensor(matrixlist[i])
 
     return T   
+
+def matrix_product(matrixlist):
+    I=Matrix.Id(len(matrixlist[0]))
+    for M in matrixlist:
+        I=M*I
+        
+    return I
 
 class MatrixError(Exception):
     """ An exception class for Matrix """
@@ -128,7 +136,21 @@ class Matrix(object):
         states.insert(0,Matrix.vector(v))
         
         return(states)
+    
+    #multiplies self(vector) with a list of matrices in the order of the list
+    def apply(self, matrices):
+        if len(self.rows[0])>1:
+            raise MatrixError("This method is reserved for vectors.")
         
+        M=Matrix.vector([0 for i in range(len(self))])
+        for i in range(len(M)):
+            M[i][0]=self[i][0]
+                
+        for N in matrices:
+            M=N*M
+            
+        return M
+
     #these are class methods for quickly generating the matrices needed in the project.
     #Add more if needed.
     @classmethod
@@ -153,8 +175,14 @@ class Matrix(object):
         return cls(rows)
     
     @classmethod
-    def H(cls):
-        return cls([[2**(-0.5),2**(-0.5)],[2**(-0.5),-(2**(-0.5))]])
+    def H(cls, size=1):
+        seznam=[]
+        if size==1:
+            return cls([[2**(-0.5),2**(-0.5)],[2**(-0.5),-(2**(-0.5))]])
+        else:
+            for i in range(size):
+                seznam.append(cls([[2**(-0.5),2**(-0.5)],[2**(-0.5),-(2**(-0.5))]]))
+        return tensor(seznam)
     
     @classmethod
     def X(cls):
@@ -171,37 +199,33 @@ class Matrix(object):
     @classmethod
     def PhaseShift(cls,phase):
         return cls([[1,0],[0,cmath.e**(1j*(phase))]])
-
-    #The matrix that swaps qbits qbit1 and qbit2
+    
     @classmethod
-    def Swap(cls,qbit1,qbit2,circuitsize):
-        if qbit1>qbit2:
-            q=qbit2
-            qbit2=qbit1
-            qbit1=q
-            
-        if qbit2>=circuitsize:
-            raise MatrixError("Qbit indices exceed circuit size.")
+    def Permutation(cls,permutation):
+        P=cls.Zero(2**(len(permutation)))
         
-        ran=(qbit2-qbit1)
-        T=cls.Id(2**circuitsize)
-        for i in range(ran):
-            A1=cls.Id(2**(qbit2-1))
-            A2=cls([[1,0,0,0],[0,0,1,0],[0,1,0,0],[0,0,0,1]])
-            A3=cls.Id(2**(circuitsize-qbit2-1))
-            T=T*tensor([A1,A2,A3])
-            qbit1+=-1
-            qbit2+=-1
-            
-        for i in range(ran-1):
-            qbit1+=1
-            qbit2+=1
-            A1=cls.Id(2**(qbit2-1))
-            A2=cls([[1,0,0,0],[0,0,1,0],[0,1,0,0],[0,0,0,1]])
-            A3=cls.Id(2**(circuitsize-qbit2-1))
-            T=T*tensor([A1,A2,A3])
-            
-        return T
+        for in_v1 in product(range(2),repeat=len(permutation)):
+            for out1 in product(range(2),repeat=len(permutation)):
+                in_v1=list(in_v1)
+                out1=list(out1)
+                in_v=[]
+                out=[]
+                for k in range(len(in_v1)):
+                    in_v.append(str(in_v1[k]))
+                    out.append(str(out1[k]))
+                    
+                x=1
+                for i in range(len(permutation)):
+                    if in_v[i]!=out[permutation[i]]:
+                        x=0
+                        break
+                    
+                if x==1:
+                    y=int('0b'+(''.join(in_v)),2)
+                    z=int('0b'+(''.join(out)),2)
+                    P[y][z]=x
+                     
+        return P
 
     @classmethod
     def Cnot(cls):

@@ -1,7 +1,8 @@
-import circuit
+from circuit import *
 from itertools import product
+from matrix import Matrix, tensor
 
-test1=False
+test1=True
 test2=True
 
 #test function for circuit (5) from the paper
@@ -52,7 +53,8 @@ if test1:
     for in_v in product(range(2),repeat=2):
         in_v=list(in_v)
         in_v=in_v + [0,0,0,0]
-        if test_function(in_v)==c.run_method1(in_v):
+        result=c.run(in_v,1,1)[0]
+        if test_function(in_v)==result:
             print("Check.")
         else:
             print("Method1 failed for input: "+str(in_v))
@@ -62,23 +64,8 @@ if test2:
     for in_v in product(range(2),repeat=2):
         in_v=list(in_v)
         in_v=in_v + [0,0,0,0]
-        if test_function(in_v)==c.run_method2(in_v):
+        result=c.run(in_v,2,1)[0]
+        if test_function(in_v)==result:
             print("Check.")
         else:
             print("Method2 failed for input: "+str(in_v))
-
-
-#another simple circuit. given the input [1, x, y] it should negate it. Given [0,x,y] it
-#should only negate the first two qbits
-b=Circuit(3)
-cnot1 = b.add_gate(CNot)
-b.add_wires(b, (0, 2), cnot1, ())
-x1 = b.add_gate(X)
-b.add_wire(b, 1, x1, 0)
-b.add_wires(cnot1, (0, 1), b, (0,2))
-b.add_wire(x1, 0, b, 1)
-x2=b.add_gate(X)
-b.add_wire(cnot1, 0, x2, 0)
-b.add_wire(x2, 0, b, 0)
-print(b.run_method1([0,0,0]))
-print(b.run_method2([0,0,0]))
