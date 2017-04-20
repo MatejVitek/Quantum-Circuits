@@ -1,7 +1,7 @@
 from main.circuit import *
 
 
-if __name__ == '__main__':
+def create_test_circuit():
 	# This is circuit (5) from the paper
 	c = Circuit(6)
 
@@ -33,14 +33,18 @@ if __name__ == '__main__':
 
 	c.add_wire(x3, 0, c, 5)
 
+	return c
+
+
+if __name__ == '__main__':
+	c = create_test_circuit()
+
 	print(c.check())
 	# Find all internal wires
 	for w in c.get_internal_wires():
 		print(w, end='\t')
 	print()
 	c.basic_draw()
-
-
 
 	# Custom circuit to test value propagation (and Uf's computation)
 	c = Circuit(3)

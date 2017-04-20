@@ -1,7 +1,7 @@
 import abc
 import random
 import string
-from matrix import Matrix, tensor
+from main.matrix import Matrix, tensor
 from collections import Counter
 from itertools import product
 from random import choices
@@ -277,11 +277,6 @@ class Circuit(object):
         
         return wire.lind
 
-    # Draw a very basic, simple picture of the circuit. Assumes everything is properly set up.
-    def basic_draw(self):
-        # TODO (Matej): Implement
-        pass
-
 
 # Abstract base class for gates
 class Gate(abc.ABC):
@@ -321,11 +316,6 @@ class Gate(abc.ABC):
         self.uuid = parent.global_id
         self.id = parent.cls_ids[self.name]
 
-    def draw(self):
-        # TODO (Matej): implement
-        # draw_box(self.name)
-        pass
-
 
 class X(Gate):
     def __init__(self):
@@ -347,20 +337,10 @@ class CNot(Gate):
     def __init__(self):
         super().__init__(Matrix.Cnot(), "CNot")
 
-    def draw(self):
-        # TODO (Matej): Implement
-        # Special draw
-        pass
-
 
 class T(Gate):
     def __init__(self):
         super().__init__(Matrix.T(), "T")
-
-    def draw(self):
-        # TODO (Matej): Implement
-        # Special draw
-        pass
 
 
 # This class is magic, probably doesn't work yet
