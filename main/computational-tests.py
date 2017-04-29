@@ -1,6 +1,6 @@
-from circuit import *
+from main.circuit import *
 from itertools import product
-from matrix import Matrix, tensor
+from random import randint, choice
 
 test1=True
 test2=True
@@ -53,7 +53,7 @@ if test1:
     for in_v in product(range(2),repeat=2):
         in_v=list(in_v)
         in_v=in_v + [0,0,0,0]
-        result=c.run(in_v,1,1)[0]
+        result=c.run(in_v)
         if test_function(in_v)==result:
             print("Check.")
         else:
@@ -64,8 +64,56 @@ if test2:
     for in_v in product(range(2),repeat=2):
         in_v=list(in_v)
         in_v=in_v + [0,0,0,0]
-        result=c.run(in_v,2,1)[0]
+        result=c.run(in_v,2)
         if test_function(in_v)==result:
             print("Check.")
         else:
             print("Method2 failed for input: "+str(in_v))
+
+def random_test(iterations):
+    for it in range(iterations):
+        size=randint(3,6)
+        n_gates=randint(1,size)
+        c=Circuit(size)
+        av_comp=[c]
+        av_in=[[i for i in range(size)]]
+        for i in range(n_gates):
+            gate=c.add(choice([X(1,"Gate "+str(i)),Y(1,"Gate "+str(i)),Z(1,"Gate "+str(i)),H(1,"Gate "+str(i)),CNot("Gate "+str(i)),T("Gate "+str(i))]))
+            for in_wire in range(len(gate)):
+                j=randint(0,len(av_comp)-1)
+                component=av_comp[j]
+                k=randint(0,len(av_in[j])-1)
+                inputs=av_in[j][k]
+                c.add_wire(component, inputs ,gate ,in_wire)
+                del av_in[j][k]
+                if av_in[j]==[]:
+                    del av_in[j]
+                    del av_comp[j]
+                    
+            av_comp.append(gate)
+            av_in.append([i for i in range(len(gate))])
+            
+        for i in range(len(c)):
+            j=randint(0,len(av_comp)-1)
+            component=av_comp[j]
+            k=randint(0,len(av_in[j])-1)
+            inputs=av_in[j][k]
+            c.add_wire(component, inputs ,c ,i)
+            del av_in[j][k]
+            if av_in[j]==[]:
+                del av_in[j]
+                del av_comp[j]
+                
+        for in_v in product(range(2),repeat=len(c)): 
+            in_v=list(in_v)
+            weights1=c.run_method1(in_v)
+            weights2=c.run_method2(in_v)
+            for k in range(len(weights1)):
+                if round(weights1[k], 14)!= round(weights2[k], 14):
+                    print("difference detected: "+str(weights1[k])+"; "+str(weights2[k]))
+                    print("input vector was: "+str(in_v))
+                    return c
+            
+    return "all tests passed"
+
+    

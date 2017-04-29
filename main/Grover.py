@@ -45,4 +45,12 @@ for t in range(times):
     c.add_wires(u2, (), h3, ())
     h1=h3
     
-c.add_wires(h1, (), c, ())   
+c.add_wires(h1, (), c, ())  
+
+gatesize=0
+int_wires=c.get_internal_wires()
+for gate in c.gates:
+    gatesize+=len(gate)
+n1=len(c.gates)*(2**(len(c)+len(int_wires)))
+n2=gatesize*(2/len(c))*len(c.gates)*(2**(2*len(c))) 
+

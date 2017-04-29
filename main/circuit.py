@@ -4,8 +4,8 @@ import string
 from main.matrix import Matrix, tensor
 from collections import Counter
 from itertools import product
-from random import choices
-from math import log
+from random import choices, choice, randint
+from math import log, modf
 
 # Wire class
 class Wire(object):
@@ -98,6 +98,45 @@ class Circuit(object):
 
     def get_internal_wires(self):
         return [wire for wire in self.wires if wire.is_internal()]
+    
+    #this is the prefered method for implementing subcircuits. It compresses the whole circuit into
+    #one matrix and returns a gate associated with it
+    def get_subcircuit(self,name):
+        self.sort()
+
+        states=Matrix.Id(2**(len(self)))
+                
+        for g_i in range(len(self.gates)):
+            gate=self.gates[g_i]
+            startqbits=[self.startqbit(g_i,i) for i in range(len(gate))]
+            permutation=[i for i in range(len(self))]
+            permuted=[]
+            for i in range(len(startqbits)):
+                x=permutation[i]
+                y=startqbits[i]
+                if x != y and x not in permuted:
+                    permutation[i]=y
+                    permutation[y]=x
+                    permuted.append(y)
+            
+            P1=Matrix.Permutation(permutation)
+            P2=P1.getConjugate()
+            
+            if len(self)==len(gate):
+                M=gate.get_matrix()
+            else:
+                M=tensor([gate.get_matrix(),Matrix.Id(2**(len(self)-len(gate)))])
+            
+            states=P2*states
+            states=M*states
+            states=P1*states
+            
+        startqbits=self.startqbits()
+        P1=Matrix.Permutation(startqbits)
+        P1.transpose()
+        states=P1*states
+            
+        return Gate(states,name)
 
     # Helper function fot the topological sort
     def visit(self, gate):
@@ -141,6 +180,7 @@ class Circuit(object):
     # Run the circuit and return the computed output vector
     #method1 is the Feynman approach
     def run_method1(self, in_v):
+        
         if len(in_v) != len(self):
             raise RuntimeError("Input length does not match the size of the circuit.")
         for i in in_v:
@@ -152,14 +192,26 @@ class Circuit(object):
         for i in range(len(self)):
             (self.input[i]).value=in_v[i]
             
-        weights=[]
+        weights=[0 for i in range(2**(len(self)))]
         int_wires=self.get_internal_wires()
-            
+        
+        index=0
         for out in product(range(2),repeat=len(self)):
             Sum=0
+            check=False
             
             for i in range(len(self)):
+                for wire in self.input:
+                    if self.output[i] == wire:
+                        if wire.value != out[i]:
+                            check=True
+                if check:
+                    break
                 (self.output[i]).value=out[i]
+                
+            if check:
+                index+=1
+                continue
             
             for assign in product(range(2),repeat=len(int_wires)):
                 assign=list(assign)
@@ -175,9 +227,10 @@ class Circuit(object):
                     prod=prod*(gate.matrix[i][j])
                     
                 Sum+=prod
-                
-            weights.append((abs(Sum))**2)
- 
+            
+            weights[index]=((abs(Sum))**2)
+            index+=1
+            
         return weights
     
     #method2 is the matrix multiplication approach
@@ -208,36 +261,52 @@ class Circuit(object):
         for g_i in range(len(self.gates)):
             gate=self.gates[g_i]
             startqbits=[self.startqbit(g_i,i) for i in range(len(gate))]
-            matrices=[]
-            #this only searches for transpositions. If there is time should find a general way to find only one
-            #permutation to optimize this
-            for i in range(len(gate)):
-                permutation=[i for i in range(len(self))]
-                j=startqbits[i]
-                if i!=j:
-                    permutation[i]=j
-                    permutation[j]=i         
-                    matrices.append(Matrix.Permutation(permutation))
-
-            if len(self)-len(gate)==0:
-                M=gate.matrix
-            else:
-                M=tensor([gate.matrix,Matrix.Id(2**(len(self)-len(gate)))])
+            permutation=[i for i in range(len(self))]
+            for i in range(len(startqbits)):
+                x=permutation[i]
+                y=startqbits[i]
+                if x != y :
+                    j=permutation.index(y)
+                    permutation[i]=y
+                    permutation[j]=x
             
-            states=states.apply(matrices)
+            P1=Matrix.Permutation(permutation)
+            if not P1.isUnitary():
+                print("permutation matrix seems to be wrong")
+            P2=P1.getConjugate()
+            
+            if len(self)==len(gate):
+                M=gate.get_matrix()
+            else:
+                M=tensor([gate.get_matrix(),Matrix.Id(2**(len(self)-len(gate)))])
+            
+            states=P2*states
             states=M*states
-            matrices.reverse()
-            states=states.apply(matrices)
-              
+            states=P1*states
+            
+        startqbits=self.startqbits()
+        P1=Matrix.Permutation(startqbits)
+        P1.transpose()
+        states=P1*states
+
         for x in range(len(states)):
             weights.append((abs(states[x][0]))**2)
-
+            
         return weights
     
-    #this is the method that should be used for running the circuit. It only performs the computation once and then
-    #makes times probabalistic choices according to a distribution given by weights
-    def run(self,in_v,method,times):
-        results=[]
+    #this is the method that should be used for running the circuit. If the prefered method of
+    #computation is not specified the faster one is automatically chosen
+    def run(self,in_v,method=None):
+        if not method:
+            int_wires=self.get_internal_wires()
+            n1=len(self.gates)*(2**(len(self)+len(int_wires)))
+            n2=(3*len(self.gates))*(2**(2*len(self)))
+            if n1<=n2:
+                print("Running method 1...")
+                method=1
+            else:
+                print("Running method 2...")
+                method=2
         
         if method==1:
             weights=self.run_method1(in_v)
@@ -250,8 +319,7 @@ class Circuit(object):
         for out in product(range(2),repeat=len(self)):
             states.append(list(out))
             
-        for i in range(times):
-            results.append(choices(states, weights)[0])
+        results=choices(states, weights)[0]
             
         return results
     
@@ -277,7 +345,62 @@ class Circuit(object):
             wire=gate.in_wires[j]
         
         return wire.lind
-
+    
+    def startqbits(self):
+        startqbits=[]
+        for i in range(len(self)):
+            gate=self
+            wire=self.output[i]
+            while wire.left != self:
+                gate=wire.left
+                j=wire.lind
+                wire=gate.in_wires[j]
+                
+            startqbits.append(wire.lind)
+            
+        return startqbits
+    
+    #returns a random quantum circuit of a specified size and number of gates. useful for testing
+    @staticmethod
+    def random_circuit(size=0, gates=0):
+        if size==0:
+            size=randint(3,6)
+        if gates==0:
+            n_gates=randint(1,size)
+        else:
+            n_gates=gates
+            
+        c=Circuit(size)
+        av_comp=[c]
+        av_in=[[i for i in range(size)]]
+        for i in range(n_gates):
+            gate=c.add(choice([X(1,"Gate "+str(i)),Y(1,"Gate "+str(i)),Z(1,"Gate "+str(i)),H(1,"Gate "+str(i)),CNot("Gate "+str(i)),T("Gate "+str(i))]))
+            for in_wire in range(len(gate)):
+                j=randint(0,len(av_comp)-1)
+                component=av_comp[j]
+                k=randint(0,len(av_in[j])-1)
+                inputs=av_in[j][k]
+                c.add_wire(component, inputs ,gate ,in_wire)
+                del av_in[j][k]
+                if av_in[j]==[]:
+                    del av_in[j]
+                    del av_comp[j]
+                    
+            av_comp.append(gate)
+            av_in.append([i for i in range(len(gate))])
+            
+        for i in range(len(c)):
+            j=randint(0,len(av_comp)-1)
+            component=av_comp[j]
+            k=randint(0,len(av_in[j])-1)
+            inputs=av_in[j][k]
+            c.add_wire(component, inputs ,c ,i)
+            del av_in[j][k]
+            if av_in[j]==[]:
+                del av_in[j]
+                del av_comp[j]
+        
+        return c
 
 # Abstract base class for gates
 class Gate(abc.ABC):
@@ -286,7 +409,7 @@ class Gate(abc.ABC):
             raise RuntimeError("Gates should be represented by square matrices.")
         if not mtrx.isUnitary():
             raise RuntimeError("Gates should be represented by unitary matrices.")
-        if len(mtrx)%2 !=0: #this should be changed into a statement involving logarithms
+        if modf(log(len(mtrx),2))[0] !=0: 
             raise RuntimeError("Invalid gate dimension.")
         size=int(log(len(mtrx),2))
 
@@ -316,59 +439,44 @@ class Gate(abc.ABC):
         self.parent = parent
         self.uuid = parent.global_id
         self.id = parent.cls_ids[self.name]
+        
+    def get_matrix(self):
+        size=2**(len(self))
+        result = Matrix([[0]*size for x in range(size)])
+        for i in range(size):
+            for j in range(size):
+                result[i][j] = self.matrix[i][j]
 
+        return result
 
 class X(Gate):
-    def __init__(self):
-        super().__init__(Matrix.X(), "X")
+    def __init__(self,size=1, name="X"):
+        super().__init__(Matrix.X(size), name)
 
 class Y(Gate):
-    def __init__(self):
-        super().__init__(Matrix.Y(), "Y")
+    def __init__(self,size=1, name="Y"):
+        super().__init__(Matrix.Y(size), name)
 
 class Z(Gate):
-    def __init__(self):
-        super().__init__(Matrix.Z(), "Z")
+    def __init__(self,size=1, name="Z"):
+        super().__init__(Matrix.Z(size), name)
 
 class H(Gate):
-    def __init__(self,size=1):
-        super().__init__(Matrix.H(size), "H")
+    def __init__(self,size=1, name="H"):
+        super().__init__(Matrix.H(size), name)
+        
+class SqrtNot(Gate):
+    def __init__(self,size=1, name="SqrtNot"):
+        super().__init__(Matrix.SqrtNot(size), name)
+        
+class QFT(Gate):
+    def __init__(self,size=1, name="QFT"):
+        super().__init__(Matrix.QFT(size), name)
 
 class CNot(Gate):
-    def __init__(self):
-        super().__init__(Matrix.Cnot(), "CNot")
-
+    def __init__(self, name="CNot"):
+        super().__init__(Matrix.Cnot(), name)
 
 class T(Gate):
-    def __init__(self):
-        super().__init__(Matrix.T(), "T")
-
-
-# This class is magic, probably doesn't work yet
-class SubCircuit(Gate, Circuit):
-    def __init__(self, size, name=None):
-        if name is None:
-            name = ''.join(random.choices(string.ascii_uppercase, k=3))
-        Gate.__init__(self, size, name)
-        Circuit.__init__(self, size)
-
-    @classmethod
-    def from_circuit(cls, circuit, name):
-        self = cls(len(circuit), name)
-        self.__dict__.update(circuit.__dict__)
-        return self
-
-    def _compute_output_vector(self, in_v):
-        return self.run(in_v)
-
-
-# Example
-# Because we don't know how to construct Uf as a SubCircuit (i.e. with a gate configuration), implement it as a new gate
-class Uf(Gate):
-    def __init__(self, f):
-        super().__init__(2, "Uf")
-        self.f = f
-
-    # This probably won't work once we work with proper quantum values
-    def _compute_output_vector(self, in_v):
-        return [in_v[0], (in_v[1] + self.f(in_v[0])) % 2]
+    def __init__(self, name="T"):
+        super().__init__(Matrix.T(), name)

@@ -69,13 +69,12 @@ class Matrix(object):
 
         return result
     
-    #this transforms all entries in the matrix to int. Needed to avoid numerical inaccuracies in some
-    #cases but is only a temporary solution. Should make a more appropriate method
-    def getInt(self):
+    #round all entries of the matrix to a number of places to prevent numerical malfunctions
+    def Round(self, places):
         M=Matrix.Zero(len(self))
         for i in range(len(M)):
             for j in range(len(M.rows[0])):
-                M[i][j]=int(self[i][j].real)
+                M[i][j]=round(self[i][j].real, places)
         return M
 
     def transpose(self):
@@ -89,7 +88,7 @@ class Matrix(object):
         return M
     
     def isUnitary(self):
-        if (self*(self.getConjugate())).getInt()==Matrix.Id(len(self)):
+        if (self*(self.getConjugate())).Round(12)==Matrix.Id(len(self)):
             return True
         else:
             return False
@@ -111,31 +110,6 @@ class Matrix(object):
                         T[i+k][j+l]=(self[int(i/p)][int(j/q)])*(M[k][l])
                         
         return T        
-    
-    #"untensor" a 2**n basis vector into 2 dimensional basis vectors
-    def untensor(self):
-        if len(self.rows[0])!=1:
-            raise MatrixError('untensor is defined for vectors (one-column matrices) only.')
-        if len(self)%2 !=0:
-            raise MatrixError('Vector dimensions are not as required.')
-            
-        states=[]
-        v=[self[i][0] for i in range(len(self))]
-        v2=[]
-        while len(v)>2:
-            v1=[]
-            for i in range(0,len(v),2):
-                if v[i]==1 or v[i+1]==1:
-                    v2=[v[i],v[i+1]]
-                    v1.append(1)
-                else:
-                    v1.append(0)
-            v=v1
-            states.insert(0,Matrix.vector(v2))
-        
-        states.insert(0,Matrix.vector(v))
-        
-        return(states)
     
     #multiplies self(vector) with a list of matrices in the order of the list
     def apply(self, matrices):
@@ -185,45 +159,81 @@ class Matrix(object):
         return tensor(seznam)
     
     @classmethod
-    def X(cls):
-        return cls([[0,1],[1,0]])
+    def X(cls, size=1):
+        seznam=[]
+        if size==1:
+            return cls([[0,1],[1,0]])
+        else:
+            for i in range(size):
+                seznam.append(cls([[0,1],[1,0]]))
+        return tensor(seznam)
 
     @classmethod
-    def Y(cls):
-        return cls([[0,-1j],[0+1j,0]])
+    def Y(cls, size=1):
+        seznam=[]
+        if size==1:
+            return cls([[0,-1j],[0+1j,0]])
+        else:
+            for i in range(size):
+                seznam.append(cls([[0,-1j],[0+1j,0]]))
+        return tensor(seznam)
 
     @classmethod
-    def Z(cls):
-        return cls([[1,0],[0,-1]])
+    def Z(cls, size=1):
+        seznam=[]
+        if size==1:
+            return cls([[1,0],[0,-1]])
+        else:
+            for i in range(size):
+                seznam.append(cls([[1,0],[0,-1]]))
+        return tensor(seznam)
+    
+    @classmethod
+    def SqrtNot(cls, size=1):
+        seznam=[]
+        if size==1:
+            return cls([[0.5*(1+1j),0.5*(1-1j)],[0.5*(1-1j),0.5*(1+1j)]])
+        else:
+            for i in range(size):
+                seznam.append(cls([[0.5*(1+1j),0.5*(1-1j)],[0.5*(1-1j),0.5*(1+1j)]]))
+        return tensor(seznam)
 
     @classmethod
-    def PhaseShift(cls,phase):
-        return cls([[1,0],[0,cmath.e**(1j*(phase))]])
+    def PhaseShift(cls,phase,size=1):
+        seznam=[]
+        if size==1:
+            return cls([[1,0],[0,cmath.e**(1j*(phase))]])
+        else:
+            for i in range(size):
+                seznam.append(cls([[1,0],[0,cmath.e**(1j*(phase))]]))
+        return tensor(seznam)
+    
+    @classmethod
+    def QFT(cls,size=1):
+        n=2**size
+        M=cls.Zero(n)
+        for i in range(n):
+            for j in range(n):
+                M[i][j]=(n**(-0.5))*(cmath.e**((i*j)*1j*2*cmath.pi/n))
+     
+        return M
     
     @classmethod
     def Permutation(cls,permutation):
         P=cls.Zero(2**(len(permutation)))
         
-        for in_v1 in product(range(2),repeat=len(permutation)):
-            for out1 in product(range(2),repeat=len(permutation)):
-                in_v1=list(in_v1)
-                out1=list(out1)
-                in_v=[]
-                out=[]
-                for k in range(len(in_v1)):
-                    in_v.append(str(in_v1[k]))
-                    out.append(str(out1[k]))
-                    
-                x=1
-                for i in range(len(permutation)):
-                    if in_v[i]!=out[permutation[i]]:
-                        x=0
-                        break
-                    
-                if x==1:
-                    y=int('0b'+(''.join(in_v)),2)
-                    z=int('0b'+(''.join(out)),2)
-                    P[y][z]=x
+        for in_v in product(range(2),repeat=len(permutation)):
+            in_v=list(in_v)
+            out=[]
+            for i in permutation:
+                out.append(str(in_v[i]))
+                
+            for i in range(len(in_v)):
+                in_v[i]=str(in_v[i])
+            
+            y=int('0b'+(''.join(in_v)),2)
+            z=int('0b'+(''.join(out)),2)
+            P[y][z]=1
                      
         return P
 
