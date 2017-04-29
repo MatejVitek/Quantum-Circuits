@@ -82,6 +82,8 @@ class Circuit(object):
         from_ports[from_port] = w
         to_ports[to_port] = w
 
+        return w
+
     # Helper method to create multiple wires at once
     # If from_ports or to_ports are empty, they default to all ports of the respective component
     def add_wires(self, from_component, from_ports, to_component, to_ports):
@@ -92,8 +94,7 @@ class Circuit(object):
         if len(from_ports) != len(to_ports):
             raise RuntimeError("Cannot add wires: Number of output ports does not match number of input ports.")
 
-        for p1, p2 in zip(from_ports, to_ports):
-            self.add_wire(from_component, p1, to_component, p2)
+        return [self.add_wire(from_component, p1, to_component, p2) for p1, p2 in zip(from_ports, to_ports)]
 
     def get_internal_wires(self):
         return [wire for wire in self.wires if wire.is_internal()]
