@@ -1,5 +1,5 @@
 from gui.main_window import MainWindow
-from gui import globals
+from gui import glob
 from main.test import create_test_circuit
 
 import sys
@@ -15,7 +15,6 @@ def main():
 		sys.exit(1)
 	sys.excepthook = my_exception_hook
 
-	globals.circuit = create_test_circuit()
 	app = QApplication(sys.argv)
 	w = MainWindow()
 	w.show()

@@ -1,6 +1,5 @@
-from gui import globals
-
-from random import randint as rnd
+from . import glob
+from .iopanel import InputPanel, OutputPanel
 
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
@@ -8,32 +7,28 @@ from PyQt5.QtCore import *
 
 
 class Canvas(QWidget):
-	def __init__(self, wire_colors, *args):
+	def __init__(self, *args):
 		super().__init__(*args)
 
-		self._colors = None
-		self.set_colors(wire_colors)
+		self.main = Scene(self)
+		self.in_panel = InputPanel(self, len(glob.circuit))
+		self.out_panel = OutputPanel(self, len(glob.circuit))
 
+		hbox = QHBoxLayout(self)
+		hbox.setContentsMargins(0, 0, 0, 0)
+		hbox.addWidget(self.in_panel, 0, Qt.AlignLeft)
+		hbox.addWidget(self.main, 0, Qt.AlignCenter)
+		hbox.addWidget(self.out_panel, 0, Qt.AlignRight)
+
+
+class Scene(QWidget):
+	def __init__(self, *args):
+		super().__init__(*args)
 		self.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
-
-		p = self.palette()
-		p.setColor(self.backgroundRole(), Qt.white)
-		self.setPalette(p)
-		self.setAutoFillBackground(True)
+		glob.set_background_color(self, Qt.white)
 
 	def sizeHint(self):
 		return QSize(1e6, 1e6)
-
-	def set_colors(self, colors):
-		circuit = globals.circuit
-		if colors is None or colors is False:
-			return
-		elif colors is True or not colors:
-			self._colors = [QColor(rnd(0, 200), rnd(0, 200), rnd(0, 200)) for _ in range(len(circuit))]
-		elif len(circuit) != len(colors):
-			raise RuntimeError("Size of color vector does not match the size of the circuit.")
-		else:
-			self._colors = colors
 
 	def paintEvent(self, e):
 		qp = QPainter()
@@ -42,17 +37,16 @@ class Canvas(QWidget):
 		qp.end()
 
 	def _draw(self, qp):
-		circuit = globals.circuit
+		circuit = glob.circuit
 		circuit.sort()
 		size = len(circuit)
 		gates = circuit.gates
-		wire_ys = self.parent().get_port_ys()
+
+		wire_ys = self.parent().in_panel.get_port_ys()
 
 		# Draw wires
 		qp.setPen(QPen(Qt.black, 2, Qt.SolidLine))
 		for i in range(size):
-			if self._colors:
-				qp.setPen(QPen(self._colors[i], 2, Qt.SolidLine))
 			qp.drawLine(0, wire_ys[i], self.width(), wire_ys[i])
 
 		# Draw circuit gates
@@ -82,12 +76,12 @@ class Canvas(QWidget):
 
 	@staticmethod
 	def _follow_wire_left(wire):
-		while wire.left is not globals.circuit:
+		while wire.left is not glob.circuit:
 			wire = wire.left.in_wires[wire.lind]
 		return wire.lind
 
 	@staticmethod
 	def _follow_wire_right(wire):
-		while wire.right is not globals.circuit:
+		while wire.right is not glob.circuit:
 			wire = wire.right.out_wires[wire.rind]
 		return wire.rind
