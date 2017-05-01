@@ -311,14 +311,6 @@ class PortItem(QGraphicsEllipseItem):
 		return self.parentItem().scenePos() + self.center
 
 
-class EmptyQGraphicsObject(QGraphicsObject):
-	def boundingRect(self):
-		return QRectF(0, 0, 0, 0)
-
-	def paint(self, qp, style, widget=None):
-		return
-
-
 class WireItem(QGraphicsPathItem):
 	def __init__(self, wire, start, end, *args):
 		super().__init__(*args)
@@ -334,27 +326,28 @@ class WireItem(QGraphicsPathItem):
 	def determine_color(self):
 		wire = self.wire
 		visited_gates = set()
+		color = Qt.black
+
 		while True:
-			# Stop checking if an appropriate port was unconnected.
+			# Stop if a port is unconnected.
 			if wire is None:
-				pen = self.pen()
-				pen.setColor(Qt.black)
-				self.setPen(pen)
-				return
-			# If the circuit was reached, determine the correct color.
+				break
+
+			# If the input panel was reached, determine the correct color.
 			if wire.left is glob.circuit:
-				pen = self.pen()
-				pen.setColor(glob.wire_colors[wire.lind])
-				self.setPen(pen)
-				return
-			# Stop checking if there's a cycle (to prevent infinite loops).
+				color = glob.wire_colors[wire.lind]
+				break
+
+			# Stop if there's a cycle (prevent infinite loops).
 			if wire.left is None or wire.left in visited_gates:
-				pen = self.pen()
-				pen.setColor(Qt.black)
-				self.setPen(pen)
-				return
+				break
+
 			visited_gates.add(wire.left)
 			wire = wire.left.in_wires[wire.lind]
+
+		pen = self.pen()
+		pen.setColor(color)
+		self.setPen(pen)
 
 	def update_path(self):
 		path = QPainterPath()
@@ -363,14 +356,15 @@ class WireItem(QGraphicsPathItem):
 		sink = self.mapFromScene(self.end.center_scene_pos())
 		curve = [(source, sink)]
 
-		if AVOID_PORTS:
-			# TODO: Subdivide if path intersects port items that aren't its start/end
-			pass
-
-		for start, stop in curve:
+		while curve:
+			start, stop = curve.pop()
 			delta = stop - start
 			dist = math.sqrt(delta.x() ** 2 + delta.y() ** 2)
 			offset = min(dist/2, WIRE_CURVE * UNIT)
+
+			if AVOID_PORTS:
+				# TODO: Subdivide if path intersects port items that aren't its start/end
+				pass
 
 			path.moveTo(start)
 			path.cubicTo(start + QPointF(offset, 0), stop - QPointF(offset, 0), stop)
