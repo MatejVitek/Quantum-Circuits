@@ -3,7 +3,6 @@ from .iopanel import InputPanel, OutputPanel
 from main.test import create_test_circuit
 
 import abc
-import itertools
 import math
 
 from PyQt5.QtWidgets import *
@@ -14,7 +13,7 @@ from PyQt5.QtCore import *
 UNIT = 50							# Base unit, all sizing is based on this
 MIN_GAP = 0.25						# Minimum vertical gap between two gates = MIN_GAP * UNIT
 WIRE_CURVE = 1.5					# Controls the wire's curvature: higher = curvier
-WIRE_MIN_OFFSET = 0.5				# Minimum curvature for short wires, should be 0 < x <= 0.5
+WIRE_MIN_OFFSET = 0.5				# Minimum control point offset for short wires, should be 0 < x <= 0.5
 AVOID_PORTS = True					# Should the wires avoid intersecting ports? May trade aesthetics for clarity
 FONT = QFont("Courier", 10)			# The font used for gate names etc.
 
@@ -74,14 +73,8 @@ class Scene(QGraphicsScene):
 		self.input.setPos(0, 0)
 
 		x = 3 * UNIT
-		y_center = self.input.rect().center().y()
 		for s in slices:
 			s, pref, weights = self._slice_sorted(s)
-
-			slack = 0.5 * UNIT
-			y_size = max(self.input.rect().height(), self._slice_size(s) * UNIT)
-			y_min = y_center - y_size / 2 - slack
-			y_max = y_center + y_size / 2 + slack
 
 			pos = self._layout_slice(s, pref, weights)
 			for i in range(len(s)):
@@ -121,7 +114,8 @@ class Scene(QGraphicsScene):
 		return zip(*sorted(zip(s, pref, weights), key=lambda x: x[1]))
 
 	def _preferred_pos(self, g):
-		p, weight = 0, len(g)
+		p = 0
+		weight = len(g)
 
 		# The preferred size and the preference strength (weight) are calculated from the gate's
 		# inbound connections' connected ports, whose static positions are already known...
