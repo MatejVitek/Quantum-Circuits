@@ -3,6 +3,7 @@ from .iopanel import InputPanel, OutputPanel
 from main.test import create_test_circuit
 
 import abc
+import itertools
 import math
 
 from PyQt5.QtWidgets import *
@@ -10,9 +11,12 @@ from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 
 
-UNIT = 50
-MIN_GAP = 0.25
-FONT = QFont("Courier", 10)
+UNIT = 50							# Base unit, all sizing is based on this
+MIN_GAP = 0.25						# Minimum vertical gap between two gates = MIN_GAP * UNIT
+WIRE_CURVE = 1.5					# Controls the wire's curvature: higher = curvier
+WIRE_MIN_OFFSET = 0.5				# Minimum curvature for short wires, should be 0 < x <= 0.5
+AVOID_PORTS = True					# Should the wires avoid intersecting ports? May trade aesthetics for clarity
+FONT = QFont("Courier", 10)			# The font used for gate names etc.
 
 
 class Scene(QGraphicsScene):
@@ -71,26 +75,18 @@ class Scene(QGraphicsScene):
 
 		x = 3 * UNIT
 		y_center = self.input.rect().center().y()
-		for i in range(len(slices)):
-			slices[i] = self._slice_sorted(slices[i])
-			s = slices[i]
+		for s in slices:
+			s, pref, weights = self._slice_sorted(s)
 
+			slack = 0.5 * UNIT
 			y_size = max(self.input.rect().height(), self._slice_size(s) * UNIT)
-			y = y_center - y_size / 2 - 0.15 * UNIT
-			y_max = y_center + y_size / 2 + 0.15 * UNIT
-			for j in range(len(s)):
-				g = s[j]
-				gate_item = self.gates[g.uuid]
+			y_min = y_center - y_size / 2 - slack
+			y_max = y_center + y_size / 2 + slack
 
-				preferred_pos = self._preferred_pos(g)
-				max_pos = y_max - self._slice_size(s[j:]) * UNIT
-				if y < preferred_pos < max_pos:
-					y = preferred_pos
-				elif preferred_pos >= max_pos:
-					y = max_pos
-
-				gate_item.setPos(x, y)
-				y += (len(g) + MIN_GAP) * UNIT
+			pos = self._layout_slice(s, pref, weights)
+			for i in range(len(s)):
+				gate_item = self.gates[s[i]]
+				gate_item.setPos(x, pos[i])
 
 			x += 2 * UNIT
 
@@ -121,23 +117,89 @@ class Scene(QGraphicsScene):
 		return sum(len(g) for g in s) + MIN_GAP * (len(s) - 1)
 
 	def _slice_sorted(self, s):
-		weights = [self._preferred_pos(g) for g in s]
-		return[x for (y, x) in sorted(zip(weights, s), key=lambda pair: pair[0])]
+		pref, weights = zip(*[self._preferred_pos(g) for g in s])
+		return zip(*sorted(zip(s, pref, weights), key=lambda x: x[1]))
 
 	def _preferred_pos(self, g):
-		p = 0
+		p, weight = 0, len(g)
+
+		# The preferred size and the preference strength (weight) are calculated from the gate's
+		# inbound connections' connected ports, whose static positions are already known...
 		for w in g.in_wires:
 			if w.left is glob.circuit:
 				p += self.input.ports[w.lind].center_scene_pos().y()
 			else:
-				p += self.gates[w.left.uuid].out_ports[w.lind].center_scene_pos().y()
+				p += self.gates[w.left].out_ports[w.lind].center_scene_pos().y()
 
-		# Average center pos - half gate item height
-		return p / len(g) - 0.5 * len(g) * UNIT
+		# ... and the locations of the ports on the output panel, which the gate is connected to (if any).
+		for w in g.out_wires:
+			if w.right is glob.circuit:
+				weight += 1
+				p += self.output.ports[w.rind].center_scene_pos().y()
+
+		# The preferred position is an average of the checked port positions.
+		# The weight is the number of checked ports.
+		return p / weight, weight
+
+	def _layout_slice(self, s, pref, weights):
+
+		# A conflict is a set of gates that would clash (or require a smaller-than-minimum gap between them)
+		# if they were placed at their respective preferred positions.
+		# Two conflicts can then form a new conflict recursively.
+
+		conflicts = [(g,) for g in s]
+		conflict_pos = list(pref)
+		conflict_weights = list(weights)
+
+		conflict_found = True
+		while conflict_found:
+			conflict_found = False
+
+			# Find a conflict and resolve it
+			for i in range(len(conflicts) - 1):
+				c1 = conflicts[i]
+				c2 = conflicts[i+1]
+				combined_size = self._slice_size(c1) + self._slice_size(c2)
+
+				# If two single gates or previous conflicts are in a conflict
+				if conflict_pos[i+1] - conflict_pos[i] < (combined_size/2 + MIN_GAP) * UNIT:
+					conflict_found = True
+
+					# Join 2 previous conflicts (or single gates) into a new conflict
+					# Calculate the new conflict's overall preferred position and new weight
+					w1 = conflict_weights[i]
+					w2 = conflict_weights[i+1]
+					new_c = c1 + c2
+					new_p = (w1 * conflict_pos[i] + w2 * conflict_pos[i+1]) / (w1 + w2)
+					new_w = w1 + w2
+
+					# Remove the 2 previous conflicts (or single gates)
+					del conflicts[i]
+					del conflicts[i]
+					del conflict_pos[i]
+					del conflict_pos[i]
+					del conflict_weights[i]
+					del conflict_weights[i]
+
+					# Insert the new information at that location
+					conflicts.insert(i, new_c)
+					conflict_pos.insert(i, new_p)
+					conflict_weights.insert(i, new_w)
+					break
+
+		# Extract gate positions. Gates inside a conflict will always be as close together as possible.
+		pos = []
+		for c, c_pos in zip(conflicts, conflict_pos):
+			y = c_pos - self._slice_size(c) / 2 * UNIT
+			for g in c:
+				pos.append(y)
+				y += (len(g) + MIN_GAP) * UNIT
+
+		return pos
 
 	def add_gate_item(self, gate, pos=(0, 0)):
 		g = GateItem(gate, pos)
-		self.gates[gate.uuid] = g
+		self.gates[gate] = g
 		self.addItem(g)
 
 	def add_wire_item(self, wire, start, end):
@@ -162,11 +224,11 @@ class Scene(QGraphicsScene):
 		if wire.left is glob.circuit:
 			start = self.input.ports[wire.lind]
 		else:
-			start = self.gates[wire.left.uuid].out_ports[wire.lind]
+			start = self.gates[wire.left].out_ports[wire.lind]
 		if wire.right is glob.circuit:
 			end = self.output.ports[wire.rind]
 		else:
-			end = self.gates[wire.right.uuid].in_ports[wire.rind]
+			end = self.gates[wire.right].in_ports[wire.rind]
 		return start, end
 
 	def _find_start_end_components_and_ports(self, start, end):
@@ -286,30 +348,33 @@ class WireItem(QGraphicsPathItem):
 				self.setPen(pen)
 				return
 			# Stop checking if there's a cycle (to prevent infinite loops).
-			if wire.left is None or wire.left.uuid in visited_gates:
+			if wire.left is None or wire.left in visited_gates:
 				pen = self.pen()
 				pen.setColor(Qt.black)
 				self.setPen(pen)
 				return
-			visited_gates.add(wire.left.uuid)
+			visited_gates.add(wire.left)
 			wire = wire.left.in_wires[wire.lind]
 
 	def update_path(self):
 		path = QPainterPath()
 
-		start_pos = self.mapFromScene(self.start.center_scene_pos())
-		end_pos = self.mapFromScene(self.end.center_scene_pos())
+		source = self.mapFromScene(self.start.center_scene_pos())
+		sink = self.mapFromScene(self.end.center_scene_pos())
+		curve = [(source, sink)]
 
-		delta = start_pos - end_pos
-		dist = math.sqrt(delta.x() ** 2 + delta.y() ** 2)
-		offset = min(dist / 2.0, UNIT)
+		if AVOID_PORTS:
+			# TODO: Subdivide if path intersects port items that aren't its start/end
+			pass
 
-		path.moveTo(start_pos)
-		path.cubicTo(
-			start_pos + QPointF(offset, 0),
-			end_pos - QPointF(offset, 0),
-			end_pos
-		)
+		for start, stop in curve:
+			delta = stop - start
+			dist = math.sqrt(delta.x() ** 2 + delta.y() ** 2)
+			offset = min(dist/2, WIRE_CURVE * UNIT)
+
+			path.moveTo(start)
+			path.cubicTo(start + QPointF(offset, 0), stop - QPointF(offset, 0), stop)
+
 		self.setPath(path)
 
 	def setPen(self, pen):
