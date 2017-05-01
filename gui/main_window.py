@@ -48,10 +48,6 @@ class MainWindow(QMainWindow):
 		self.resize(0.4 * g.width(), 0.4 * g.height())
 		self.move(g.center().x() - self.width()/2, g.center().y() - self.height()/2)
 
-	def closeEvent(self, *args, **kwargs):
-		self.deleteLater()
-		super().closeEvent(*args, **kwargs)
-
 
 class PanelToolBar(QToolBar, abc.ABC, metaclass=glob.AbstractWidgetMeta):
 	def __init__(self, *args):
