@@ -449,6 +449,7 @@ class Gate(abc.ABC):
     # Sets the gate's parent (the circuit it belongs to) and its ID numbers
     def set_parent(self, parent):
         self.parent = parent
+        self.id = parent.cls_ids[self.name]
         self.uuid = uuid4()
         while any(g.uuid == self.uuid for g in parent.gates if g is not self):
             self.uuid = uuid4()
