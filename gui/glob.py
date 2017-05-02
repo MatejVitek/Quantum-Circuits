@@ -1,6 +1,8 @@
 from main.circuit import Circuit
 
 from abc import ABCMeta
+from numbers import Real
+from operator import mul, truediv
 from random import randint
 
 from PyQt5.QtGui import *
@@ -107,3 +109,19 @@ def set_background_color(widget, color):
 
 def create_square(center, size):
 	return QRectF(center - QPointF(size/2, size/2), QSizeF(size, size))
+
+
+def _op(self, f, op):
+	if isinstance(f, Real):
+		return type(self)(op(self.x(), f), op(self.y(), f))
+	raise NotImplementedError
+
+
+QPointF.__mul__ = lambda self, f: _op(self, f, mul)
+QPointF.__rmul__ = lambda self, f: _op(self, f, mul)
+QPointF.__truediv__ = lambda self, f: _op(self, f, truediv)
+QPointF.__rtruediv__ = lambda self, f: _op(self, f, truediv)
+QPoint.__mul__ = lambda self, f: _op(self, f, mul)
+QPoint.__rmul__ = lambda self, f: _op(self, f, mul)
+QPoint.__truediv__ = lambda self, f: _op(self, f, truediv)
+QPoint.__rtruediv__ = lambda self, f: _op(self, f, truediv)
