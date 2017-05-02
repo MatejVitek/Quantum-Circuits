@@ -64,7 +64,7 @@ def _rnd():
 
 
 class VectorObject(QObject):
-	changed = pyqtSignal(int, int, name='ioChanged')
+	changed = pyqtSignal('PyQt_PyObject', 'PyQt_PyObject', name='ioChanged')
 
 	def __init__(self, size):
 		super().__init__()
@@ -91,6 +91,12 @@ class VectorObject(QObject):
 
 		self._vector[key] = val
 		self.changed.emit(key, val)
+
+	def get(self):
+		return self[:]
+
+	def set(self, v):
+		self[:] = v
 
 	def toggle(self, i):
 		self[i] = 1 - self[i]

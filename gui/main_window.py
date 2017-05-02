@@ -13,12 +13,15 @@ class MainWindow(QMainWindow):
 		self._init_ui()
 
 	def _init_ui(self):
-		#self.basic_canvas = basic_canvas.Canvas(self)
+		# Deprecated canvas: self.basic_canvas = basic_canvas.Canvas(self)
 		self.canvas = canvas.Canvas(self)
 		self.setCentralWidget(self.canvas)
 
 		self.run_panel = RunToolBar(self)
+		self.canvas.scene.circuit_ok.connect(self.run_panel.run_button.setEnabled)
+		self.canvas.scene.check_circuit()
 		self.addToolBar(Qt.BottomToolBarArea, self.run_panel)
+
 		self.input_panel = IOToolBar(self)
 		self.canvas.scene.new_circuit.connect(self.input_panel.new)
 		self.addToolBar(Qt.LeftToolBarArea, self.input_panel)
@@ -41,7 +44,9 @@ class MainWindow(QMainWindow):
 			self.output_panel.setVisible(visible)
 
 	def run(self):
-		pass
+		in_v = glob.in_vector.get()
+		out_v = glob.circuit.run(in_v)
+		glob.out_vector.set(out_v)
 
 	def reset_placement(self):
 		g = QDesktopWidget().availableGeometry()

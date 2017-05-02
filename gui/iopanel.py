@@ -33,7 +33,10 @@ class IOPanel(QWidget, abc.ABC, metaclass=glob.AbstractWidgetMeta):
 
 	def __setitem__(self, key, val):
 		if isinstance(key, slice):
-			for i, j in zip(range(key.start, key.stop, key.step), range(len(val))):
+			start = key.start or 0
+			stop = key.stop or len(self.fields)
+			step = key.step or 1
+			for i, j in zip(range(start, stop, step), range(len(val))):
 				self.fields[i].label.setText(str(val[j]))
 		else:
 			self.fields[key].label.setText(str(val))
