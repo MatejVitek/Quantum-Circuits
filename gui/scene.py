@@ -4,6 +4,7 @@ from main.test import create_test_circuit
 
 import abc
 import math
+import random
 
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
@@ -14,7 +15,7 @@ UNIT = 50							# Base unit, all sizing is based on this
 MIN_GAP = 0.25						# Minimum vertical gap between two gates = MIN_GAP * UNIT
 WIRE_CURVE = 1.5					# Controls the wire's curvature: higher = curvier
 WIRE_MIN_OFFSET = 0.5				# Minimum control point offset for short wires, should be 0 < x <= 0.5
-AVOID_PORTS = True					# Should the wires avoid intersecting ports? May trade aesthetics for clarity
+AVOID_PORTS = False					# Should the wires avoid intersecting ports? May trade aesthetics for clarity
 FONT = QFont("Courier", 10)			# The font used for gate names etc.
 
 
@@ -23,17 +24,23 @@ class Scene(QGraphicsScene):
 	circuit_changed = pyqtSignal(name='circuitChanged')
 	scene_changed = pyqtSignal(name='sceneChanged')
 
+	circuit_ok = pyqtSignal(bool, name='circuitOK')
+
 	def __init__(self, *args):
 		super().__init__(*args)
 
 		self.new_circuit.connect(self.circuit_changed)
 		self.circuit_changed.connect(self.scene_changed)
+		self.circuit_changed.connect(self.check_circuit)
 
 		self.input = None
 		self.output = None
 		self.gates = None
 		self.new(create_test_circuit(), [Qt.black, Qt.red, Qt.blue, Qt.darkGreen, Qt.magenta, Qt.darkCyan])
 		self.setSceneRect(QRectF(-1e6, -1e6, 2e6, 2e6))
+
+	def check_circuit(self):
+		self.circuit_ok.emit(glob.circuit.check())
 
 	def new(self, circuit, colors=None):
 		for item in self.items():
@@ -57,7 +64,10 @@ class Scene(QGraphicsScene):
 			for wire in circuit.wires:
 				self.add_wire_item(wire, *self._find_start_end(wire))
 
-			self._prettify()
+			#self._prettify()
+			for item in self.items():
+				if isinstance(item, GateItem):
+					item.setPos(random.randint(0, 500), random.randint(0, 500))
 
 		self.new_circuit.emit()
 
@@ -344,40 +354,104 @@ class WireItem(QGraphicsPathItem):
 		self.setPen(pen)
 
 	def update_path(self):
-		path = QPainterPath()
-
 		source = self.mapFromScene(self.start.center_scene_pos())
 		sink = self.mapFromScene(self.end.center_scene_pos())
-		curve = [(source, sink)]
+		path = self._path_between(source, sink)
 
-		while curve:
-			start, stop = curve.pop()
-			delta = stop - start
-			dist = math.sqrt(delta.x() ** 2 + delta.y() ** 2)
-			offset = min(dist/2, WIRE_CURVE * UNIT)
-
-			if AVOID_PORTS:
-				# TODO: Subdivide if path intersects port items that aren't its start/end
-				pass
-
-			path.moveTo(start)
-			path.cubicTo(start + QPointF(offset, 0), stop - QPointF(offset, 0), stop)
+		if AVOID_PORTS:
+			path = self._subdivide_at_intersects(source, sink, path)
 
 		self.setPath(path)
 
-	def setPen(self, pen):
+	# Return the bezier curve (or spline) between the two points
+	@classmethod
+	def _path_between(cls, start, stop):
+		path = QPainterPath()
+
+		if start.x() < stop.x():
+			delta = stop - start
+			dist = math.sqrt(delta.x()**2 + delta.y()**2)
+			offset = min(WIRE_MIN_OFFSET * dist, WIRE_CURVE * UNIT)
+			path.moveTo(start)
+			path.cubicTo(start + QPointF(offset, 0), stop - QPointF(offset, 0), stop)
+
+		else:
+			offset = WIRE_MIN_OFFSET * UNIT
+			mid = (start + stop) / 2
+			if abs(mid.y() - start.y()) < offset:
+				mid.setY(start.y() + math.copysign(2 * offset, mid.y() - start.y()))
+
+			spline = cls._spline((
+				start,
+				start + QPointF(offset, 0),
+				QPointF(start.x() + offset, mid.y()),
+				QPointF(stop.x() - offset, mid.y()),
+				stop - QPointF(offset, 0),
+				stop
+			))
+
+			for start, p1, p2, stop in spline:
+				path.moveTo(start)
+				path.cubicTo(p1, p2, stop)
+
+		return path
+
+	@staticmethod
+	def _spline(d):
+		m = len(d) - 3
+		bs = [[d[0], d[1], (d[1] + d[2])/2, None]]
+
+		for l in range(m-2):
+			bs.append([None, 2/3 * d[l+2] + 1/3 * d[l+3], 1/3 * d[l+2] + 2/3 * d[l+3], None])
+		bs.append([None, 1/2 * d[-3] + 1/2 * d[-2], d[-2], d[-1]])
+
+		for l in range(m-1):
+			bs[l][3] = bs[l+1][0] = 1/2 * bs[l][2] + 1/2 * bs[l+1][1]
+
+		return bs
+
+	def _subdivide_at_intersects(self, start, stop, path):
+		p1, p2 = self._intersected_port(path)
+		print("A", p1, p2, start, stop)
+		if p1 or p2:
+			if p1:
+				p2 = p1 + QPointF(UNIT, 0)
+			elif p2:
+				p1 = p2 - QPointF(UNIT, 0)
+			path1 = self._path_between(start, p1)
+			path2 = self._path_between(p2, stop)
+			print("B", start, p1)
+			path = self._subdivide_at_intersects(start, p1, path1) + self._subdivide_at_intersects(p2, stop, path2)
+		return path
+
+	def _intersected_port(self, path):
+		for g in self.scene().gates.values():
+			for p in g.in_ports:
+				if p is not self.end and path.intersects(p.rect()):
+					return None, self._get_better_pos(path, p)
+			for p in g.out_ports:
+				if p is not self.start and path.intersects(p.rect()):
+					return self._get_better_pos(path, p), None
+		return None, None
+
+	@staticmethod
+	def _get_better_pos(path, port):
+		offset = 0.25 * QPointF(0, UNIT)
+		return port.center_scene_pos() + offset
+
+	def setPen(self, *args):
 		self.prepareGeometryChange()
-		super().setPen(pen)
+		super().setPen(*args)
 
 	def shape(self):
 		if self._shape is None:
 			self._shape = self._stroke_path()
 		return self._shape
 
-	def setPath(self, path):
+	def setPath(self, *args):
 		self.prepareGeometryChange()
 		self._shape = None
-		super().setPath(path)
+		super().setPath(*args)
 
 	def _stroke_path(self):
 		pen = QPen(QBrush(Qt.black), self.pen().widthF(), Qt.SolidLine)
