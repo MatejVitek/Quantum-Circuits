@@ -36,6 +36,8 @@ class Scene(QGraphicsScene):
 		self.circuit_ok.emit(glob.circuit.check())
 
 	def new(self, circuit, colors=None):
+		self.blockSignals(True)
+
 		for item in self.items():
 			del item
 		self.gates = {}
@@ -59,6 +61,7 @@ class Scene(QGraphicsScene):
 
 			self._prettify()
 
+		self.blockSignals(False)
 		self.new_circuit.emit()
 
 	def prettify(self):
@@ -71,6 +74,7 @@ class Scene(QGraphicsScene):
 		slices = self.slice_up(circuit)
 
 		self.input.setPos(0, 0)
+		self.output.setPos((2 * len(slices) + 3) * UNIT, 0)
 
 		x = 3 * UNIT
 		for s in slices:
@@ -82,8 +86,6 @@ class Scene(QGraphicsScene):
 				gate_item.setPos(x, pos[i])
 
 			x += 2 * UNIT
-
-		self.output.setPos(x, 0)
 
 	def slice_up(self, circuit):
 		remaining = set(circuit.gates)
