@@ -11,23 +11,29 @@ from PyQt5.QtCore import *
 FONT = QFont("Courier", 10)			# The font used for gate names etc.
 
 
-class IOItem(QGraphicsProxyWidget, abc.ABC, metaclass=glob.AbstractWidgetMeta):
+class IOItem(QGraphicsRectItem, abc.ABC, metaclass=glob.AbstractWidgetMeta):
 	def __init__(self, pos, width, circuit_size, panel_type, port_align, *args):
-		super().__init__(*args)
-		self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges, True)
+		super().__init__(QRectF(*pos, width, circuit_size * UNIT), *args)
+		self.setFlag(QGraphicsItem.ItemIsMovable)
+		self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges)
 		self.setZValue(1)
-		self.setWidget(panel_type(circuit_size))
-		self.setGeometry(QRectF(*pos, width, circuit_size * UNIT))
+		self.setPen(QPen(Qt.NoPen))
+		self.setBrush(QBrush(Qt.NoBrush))
 		rect = self.rect()
 
+		self.proxy = QGraphicsProxyWidget(self)
+		self.widget = panel_type(circuit_size)
+		self.proxy.setWidget(self.widget)
+		self.proxy.setGeometry(rect)
+
 		x = 0 if port_align & Qt.AlignLeft else rect.width() if port_align & Qt.AlignRight else rect.width()/2
-		ys = self.widget().get_port_ys()
+		ys = self.widget.get_port_ys()
 		self.ports = tuple(PortItem(QPointF(x, ys[i]), self) for i in range(circuit_size))
 
 	def itemChange(self, change, value):
 		if change == QGraphicsItem.ItemScenePositionHasChanged:
 			self.scene().scene_changed.emit()
-		return QGraphicsProxyWidget.itemChange(self, change, value)
+		return QGraphicsItem.itemChange(self, change, value)
 
 
 class InputItem(IOItem):
@@ -43,7 +49,9 @@ class OutputItem(IOItem):
 class GateItem(QGraphicsRectItem):
 	def __init__(self, gate, pos=(0, 0), *args):
 		super().__init__(*pos, UNIT, len(gate) * UNIT, *args)
-		self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges, True)
+		self.setFlag(QGraphicsItem.ItemIsMovable)
+		self.setFlag(QGraphicsItem.ItemIsSelectable)
+		self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges)
 		self.gate = gate
 		self.setBrush(QBrush(Qt.white))
 		rect = self.rect()

@@ -68,27 +68,20 @@ class Scene(QGraphicsScene):
 
 	def _add_io_items(self, size):
 		self.input = InputItem(size)
-		self.input.setFlag(QGraphicsItem.ItemIsMovable)
-		self.input.setFlag(QGraphicsItem.ItemIsSelectable)
 		self.addItem(self.input)
 		self.input.setPos(0, 0)
 
 		self.output = OutputItem(size)
-		self.output.setFlag(QGraphicsItem.ItemIsMovable)
-		self.output.setFlag(QGraphicsItem.ItemIsSelectable)
 		self.addItem(self.output)
 		self.output.setPos(10 * UNIT, 0)
 
 	def _add_gate_item(self, gate, pos=(0, 0)):
 		g = GateItem(gate, pos)
-		g.setFlag(QGraphicsItem.ItemIsMovable)
-		g.setFlag(QGraphicsItem.ItemIsSelectable)
 		self.gates[gate] = g
 		self.addItem(g)
 
 	def _add_wire_item(self, wire, start, end):
 		w = WireItem(wire, start, end)
-		w.setFlag(QGraphicsItem.ItemIsSelectable)
 		self.wires[wire] = w
 		self.addItem(w)
 

@@ -19,6 +19,7 @@ class WireItem(QGraphicsPathItem):
 		super().__init__(*args)
 		self.wire = wire
 		self.setZValue(-1)
+		self.setFlag(QGraphicsItem.ItemIsSelectable)
 
 		self.start = start
 		self.end = end
