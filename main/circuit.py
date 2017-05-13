@@ -194,9 +194,35 @@ class Circuit(object):
             all(wire is not None for wire in self.input) and
             all(wire is not None for wire in self.output) and
             all(wire is not None for gate in self.gates for wire in gate.in_wires) and
-            all(wire is not None for gate in self.gates for wire in gate.out_wires)
+            all(wire is not None for gate in self.gates for wire in gate.out_wires) and
+            not self.contains_cycle()
         )
         # TODO: Possibly other checks
+
+    # Check if the circuit contains a cycle
+    def contains_cycle(self):
+        unchecked = {g for g in self.gates}
+        while unchecked:
+            g = unchecked.pop()
+            if self._dfs(g, None, unchecked, set()):
+                return True
+        return False
+
+    def _dfs(self, g, last_wire, unchecked, visited):
+        if g in visited:
+            return True
+        new_visited = visited | {g}
+        for w in g.out_wires:
+            if w is not None and w is not last_wire and w.right is not self:
+                unchecked.discard(w.right)
+                if self._dfs(w.right, w, unchecked, new_visited):
+                    return True
+        for w in g.in_wires:
+            if w is not None and w is not last_wire and w.left is not self:
+                unchecked.discard(w.left)
+                if self._dfs(w.left, w, unchecked, new_visited):
+                    return True
+        return False
 
     # Run the circuit and return the computed output vector
     #method1 is the Feynman approach
