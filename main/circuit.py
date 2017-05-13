@@ -97,7 +97,29 @@ class Circuit(object):
 
     def get_internal_wires(self):
         return [wire for wire in self.wires if wire.is_internal()]
-    
+
+    # Remove a gate and the wires connected to it
+    def remove_gate(self, g):
+        if not g:
+            return
+        for w in g.in_wires + g.out_wires:
+            self.remove_wire(w)
+        self.gates.remove(g)
+
+    # Remove a single wire
+    def remove_wire(self, w):
+        if not w:
+            return
+        if w.left is self:
+            self.input[w.lind] = None
+        elif w.left:
+            w.left.out_wires[w.lind] = None
+        if w.right is self:
+            w.right.output[w.rind] = None
+        elif w.right:
+            w.right.in_wires[w.rind] = None
+        self.wires.remove(w)
+
     #this is the prefered method for implementing subcircuits. It compresses the whole circuit into
     #one matrix and returns a gate associated with it
     def get_subcircuit(self,name):

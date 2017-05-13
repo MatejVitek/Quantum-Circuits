@@ -71,7 +71,7 @@ class VectorObject(QObject):
 		self._vector = [0] * size
 
 	def __str__(self):
-		return "".join(str(i) for i in self)
+		return "".join(map(str, self))
 
 	def __len__(self):
 		return len(self._vector)
@@ -81,13 +81,13 @@ class VectorObject(QObject):
 
 	def __setitem__(self, key, val):
 		try:
-			map(int, val)
+			val = [int(v) for v in val]
 			if any(v not in (0, 1) for v in val):
-				raise RuntimeError("Only binary values allowed.")
+				raise ValueError("Only binary values allowed.")
 		except TypeError:
 			val = int(val)
 			if val not in (0, 1):
-				raise RuntimeError("Only binary values allowed.")
+				raise ValueError("Only binary values allowed.")
 
 		self._vector[key] = val
 		self.changed.emit(key, val)
