@@ -73,12 +73,45 @@ class GateItem(QGraphicsRectItem):
 
 class PortItem(QGraphicsEllipseItem):
 	SIZE = 8
+	HL_SCALE = 1.5
+	HL_BRUSH = QBrush(Qt.darkYellow)
 
 	def __init__(self, center, *args):
 		super().__init__(glob.create_square(center, self.SIZE), *args)
+		self.wire = None
 		self.center = center
+		self.setTransformOriginPoint(self.center)
+		self.setPen(QPen(Qt.NoPen))
 		self.setBrush(QBrush(Qt.black))
 
 	def center_scene_pos(self):
 		return self.parentItem().scenePos() + self.center
 
+	def connect(self, wire):
+		self.wire = wire
+		self.setAcceptHoverEvents(wire is None)
+		self.set_highlight(False)
+
+	def disconnect(self):
+		self.connect(None)
+
+	def set_highlight(self, hl=True):
+		self.setScale(self.HL_SCALE if hl else 1)
+		self.setBrush(self.HL_BRUSH if hl else QBrush(Qt.black))
+
+	def hoverEnterEvent(self, *args):
+		self.set_highlight(True)
+		super().hoverEnterEvent(*args)
+
+	def hoverLeaveEvent(self, *args):
+		self.set_highlight(False)
+		super().hoverLeaveEvent(*args)
+
+	def mousePressEvent(self, e):
+		if e.button() != Qt.LeftButton or not self.acceptHoverEvents():
+			return super().mousePressEvent(e)
+		e.accept()
+
+	def mouseReleaseEvent(self, e):
+		self.scene().build_wire(self)
+		e.accept()

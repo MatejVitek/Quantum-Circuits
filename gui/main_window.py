@@ -26,12 +26,16 @@ class MainWindow(QMainWindow):
 		self.canvas.scene.check_circuit()
 		self.addToolBar(Qt.BottomToolBarArea, self.run_panel)
 
+		scene = self.canvas.scene
 		self.in_panel = None
 		self.out_panel = None
-		self.canvas.scene.new_circuit.connect(self.refresh)
+		scene.new_circuit.connect(self.refresh)
 
 		self.menu_bar = MenuBar(self)
 		self.setMenuBar(self.menu_bar)
+
+		scene.circuit_changed.connect(self.statusBar().clearMessage)
+		scene.status.connect(self.statusBar().showMessage)
 
 		self.setWindowTitle("Quantum Circuits")
 		self.setWindowIcon(QIcon("../Resources/Icon.png"))

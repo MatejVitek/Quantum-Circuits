@@ -29,3 +29,24 @@ class View(QGraphicsView):
 		self.scale(scale, scale)
 
 		e.accept()
+
+	def enterEvent(self, *args):
+		super().enterEvent(*args)
+		self.viewport().unsetCursor()
+
+	def mousePressEvent(self, *args):
+		super().mousePressEvent(*args)
+		self.viewport().unsetCursor()
+
+	def mouseReleaseEvent(self, *args):
+		super().mouseReleaseEvent(*args)
+		self.viewport().unsetCursor()
+
+	def mouseMoveEvent(self, e):
+		super().mouseMoveEvent(e)
+		if e.buttons() == Qt.LeftButton:
+			self.viewport().setCursor(Qt.ClosedHandCursor)
+		else:
+			self.viewport().unsetCursor()
+			if self.scene().partial_wire is not None:
+				self.scene().partial_wire.update_path(self.mapToScene(e.pos()))

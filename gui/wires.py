@@ -8,10 +8,58 @@ from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 
 
+WIDTH = 3							# Wire width
 WIRE_CURVE = 1.5					# Controls the wire's curvature: higher = curvier
 WIRE_MIN_CP_OFFSET = 0.5			# Minimum first control point offset for short wires, should be x ∈ (0, 0.5]
 WIRE_MIN_SPECIAL_OFFSET = 0.25		# Minimum offset for backward loops and port avoiding
 AVOID_PORTS = True					# Should the wires avoid intersecting ports? May trade aesthetics for clarity
+
+
+# Return the bezier curve (or spline) between two points
+def path_between(start, stop):
+	if start.x() < stop.x():
+		delta = stop - start
+		dist = math.sqrt(delta.x() ** 2 + delta.y() ** 2)
+		offset = QPointF(min(WIRE_MIN_CP_OFFSET * dist, WIRE_CURVE * UNIT), 0)
+		path = QPainterPath(start)
+		path.cubicTo(start + offset, stop - offset, stop)
+
+	else:
+		offset = QPointF(WIRE_MIN_SPECIAL_OFFSET * UNIT, 0)
+
+		mid = (start + stop) / 2
+		if abs(mid.y() - start.y()) < offset.x():
+			mid.setY(start.y() + math.copysign(2 * offset.x(), mid.y() - start.y()))
+
+		path = spline((
+			start,
+			start + offset,
+			QPointF(start.x(), mid.y()) + offset,
+			QPointF(stop.x(), mid.y()) - offset,
+			stop - offset,
+			stop
+		))
+
+	return path
+
+
+def spline(d):
+	m = len(d) - 3
+	bs = [[d[0], d[1], (d[1] + d[2])/2, None]]
+
+	for l in range(m-2):
+		bs.append([None, 2/3 * d[l+2] + 1/3 * d[l+3], 1/3 * d[l+2] + 2/3 * d[l+3], None])
+	bs.append([None, 1/2 * d[-3] + 1/2 * d[-2], d[-2], d[-1]])
+
+	for l in range(m-1):
+		bs[l][3] = bs[l+1][0] = 1/2 * bs[l][2] + 1/2 * bs[l+1][1]
+
+	path = QPainterPath()
+	for start, p1, p2, stop in bs:
+		path.moveTo(start)
+		path.cubicTo(p1, p2, stop)
+
+	return path
 
 
 class WireItem(QGraphicsPathItem):
@@ -23,10 +71,12 @@ class WireItem(QGraphicsPathItem):
 
 		self.start = start
 		self.end = end
+		self.start.connect(self)
+		self.end.connect(self)
 
 		self._shape = None
 		self._rect = None
-		self.setPen(QPen(QBrush(Qt.black), 3))
+		self.setPen(QPen(QBrush(Qt.black), WIDTH))
 
 	def determine_color(self):
 		wire = self.wire
@@ -60,7 +110,7 @@ class WireItem(QGraphicsPathItem):
 
 		source = self.start.center_scene_pos()
 		sink = self.end.center_scene_pos()
-		path = self._path_between(source, sink)
+		path = path_between(source, sink)
 
 		if AVOID_PORTS:
 			gates = self.scene().gates.values()
@@ -69,53 +119,6 @@ class WireItem(QGraphicsPathItem):
 			path = self._circumvent_ports(source, sink, path, in_ports, out_ports)
 
 		self.setPath(path)
-
-	# Return the bezier curve (or spline) between the two points
-	@classmethod
-	def _path_between(cls, start, stop):
-		if start.x() < stop.x():
-			delta = stop - start
-			dist = math.sqrt(delta.x()**2 + delta.y()**2)
-			offset = QPointF(min(WIRE_MIN_CP_OFFSET * dist, WIRE_CURVE * UNIT), 0)
-			path = QPainterPath(start)
-			path.cubicTo(start + offset, stop - offset, stop)
-
-		else:
-			offset = QPointF(WIRE_MIN_SPECIAL_OFFSET * UNIT, 0)
-
-			mid = (start + stop) / 2
-			if abs(mid.y() - start.y()) < offset.x():
-				mid.setY(start.y() + math.copysign(2 * offset.x(), mid.y() - start.y()))
-
-			path = cls._spline((
-				start,
-				start + offset,
-				QPointF(start.x(), mid.y()) + offset,
-				QPointF(stop.x(), mid.y()) - offset,
-				stop - offset,
-				stop
-			))
-
-		return path
-
-	@staticmethod
-	def _spline(d):
-		m = len(d) - 3
-		bs = [[d[0], d[1], (d[1] + d[2])/2, None]]
-
-		for l in range(m-2):
-			bs.append([None, 2/3 * d[l+2] + 1/3 * d[l+3], 1/3 * d[l+2] + 2/3 * d[l+3], None])
-		bs.append([None, 1/2 * d[-3] + 1/2 * d[-2], d[-2], d[-1]])
-
-		for l in range(m-1):
-			bs[l][3] = bs[l+1][0] = 1/2 * bs[l][2] + 1/2 * bs[l+1][1]
-
-		path = QPainterPath()
-		for start, p1, p2, stop in bs:
-			path.moveTo(start)
-			path.cubicTo(p1, p2, stop)
-
-		return path
 
 	def _circumvent_ports(self, start, stop, path, in_ports, out_ports):
 		port1, port2 = self._intersected_port(path, in_ports, out_ports)
@@ -146,11 +149,11 @@ class WireItem(QGraphicsPathItem):
 				return path
 			p = p2 if start.x() > p1.x() else p1
 			offset = QPointF(WIRE_MIN_SPECIAL_OFFSET * UNIT, 0)
-			path = self._spline((start, start + offset, p, stop - offset, stop))
+			path = spline((start, start + offset, p, stop - offset, stop))
 			return self._circumvent_ports(start, stop, path, in_ports, out_ports)
 
-		path1 = self._path_between(start, p1)
-		path2 = self._path_between(p2, stop)
+		path1 = path_between(start, p1)
+		path2 = path_between(p2, stop)
 		path1 = self._circumvent_ports(start, p1, path1, in_ports, out_ports)
 		path2 = self._circumvent_ports(p2, stop, path2, in_ports, out_ports)
 
@@ -199,7 +202,7 @@ class WireItem(QGraphicsPathItem):
 		return self._shape
 
 	def _stroke_path(self):
-		pen = QPen(QBrush(Qt.black), 2 * self.pen().widthF(), Qt.SolidLine)
+		pen = QPen(QBrush(Qt.black), self.pen().widthF() + 20, Qt.SolidLine)
 		stroker = QPainterPathStroker()
 		stroker.setCapStyle(pen.capStyle())
 		stroker.setJoinStyle(pen.joinStyle())
@@ -210,4 +213,50 @@ class WireItem(QGraphicsPathItem):
 	def boundingRect(self):
 		if self._rect is None:
 			self._rect = self._stroke_path().boundingRect()
+		return self._rect
+
+	def paint(self, qp, option, *args):
+		selected = option.state & QStyle.State_Selected
+		option.state &= ~QStyle.State_Selected
+		super().paint(qp, option, *args)
+		if selected:
+			qp.setPen(QPen(Qt.black, 2))
+			qp.setBrush(QBrush(Qt.white))
+
+			start = self.start.center_scene_pos()
+			end = self.end.center_scene_pos()
+			offset = QPointF(min(15., max(10., (end.x() - start.x()) / 4)), 0)
+			qp.drawConvexPolygon(start - QPointF(0, 5), start + QPointF(0, 5), start + offset)
+			qp.drawConvexPolygon(end - QPointF(0, 5), end + QPointF(0, 5), end - offset)
+
+
+class PartialWireItem(QGraphicsPathItem):
+	def __init__(self, start, *args):
+		super().__init__(*args)
+		self.start = start
+		self.reverse = False
+
+		self._rect = None
+		self.setPen(QPen(QBrush(Qt.black), WIDTH))
+
+	def update_path(self, pos):
+		source = self.start.center_scene_pos()
+		if self.reverse:
+			source, pos = pos, source
+		path = path_between(source, pos)
+		self.setPath(path)
+
+	def setPen(self, *args):
+		self.prepareGeometryChange()
+		self._rect = None
+		super().setPen(*args)
+
+	def setPath(self, *args):
+		self.prepareGeometryChange()
+		self._rect = None
+		super().setPath(*args)
+
+	def boundingRect(self):
+		if self._rect is None:
+			self._rect = self.path().boundingRect()
 		return self._rect

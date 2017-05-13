@@ -2,7 +2,7 @@ UNIT = 50							# Base unit, all sizing is based on this
 MIN_GAP = 0.25						# Minimum vertical gap between two gates = MIN_GAP * UNIT
 
 
-from .wires import WireItem
+from .wires import WireItem, PartialWireItem
 from .nodes import GateItem, InputItem, OutputItem
 from . import glob
 from main.test import create_test_circuit
@@ -17,6 +17,7 @@ class Scene(QGraphicsScene):
 	circuit_changed = pyqtSignal(name='circuitChanged')
 	scene_changed = pyqtSignal(name='sceneChanged')
 	circuit_ok = pyqtSignal(bool, name='circuitOK')
+	status = pyqtSignal(str, name='cycle')
 
 	def __init__(self, *args):
 		super().__init__(*args)
@@ -28,8 +29,9 @@ class Scene(QGraphicsScene):
 		self.input = None
 		self.output = None
 		self.gates = None
-		self.wires = None
 		self.new(create_test_circuit(), [Qt.black, Qt.red, Qt.blue, Qt.darkGreen, Qt.magenta, Qt.darkCyan])
+
+		self.partial_wire = None
 
 		self.setSceneRect(QRectF(-1e6, -1e6, 2e6, 2e6))
 
@@ -40,12 +42,47 @@ class Scene(QGraphicsScene):
 		self._prettify()
 		self.scene_changed.emit()
 
+	def build_wire(self, port):
+		if port is None:
+			self.removeItem(self.partial_wire)
+			self.partial_wire = None
+
+		elif self.partial_wire is None:
+			self.partial_wire = PartialWireItem(port)
+			if self._invalid(port, None):
+				self.partial_wire.reverse = True
+			self.addItem(self.partial_wire)
+
+		else:
+			start = self.partial_wire.start
+			end = port
+			if self.partial_wire.reverse:
+				start, end = end, start
+			if start is end:
+				self.status.emit("Cannot connect port to itself.")
+			elif self._invalid(start, end):
+				self.status.emit("Connect an input port and an output port.")
+			else:
+				item = self.add_wire(start, end)
+				if glob.circuit.contains_cycle():
+					self.status.emit("Circuit should not contain cycles.")
+					self.remove_wire_item(item)
+			self.build_wire(None)
+
+	def _invalid(self, start, end):
+		return (
+			start is not None and start.parentItem() is self.output or
+			start is not None and isinstance(start.parentItem(), GateItem) and start in start.parentItem().in_ports or
+			end is not None and end.parentItem() is self.input or
+			end is not None and isinstance(end.parentItem(), GateItem) and end in end.parentItem().out_ports
+		)
+
 	def new(self, circuit, colors=None):
 		self.blockSignals(True)
 
 		self.gates = {}
-		self.wires = {}
 		self.clear()
+		self.partial_wire = None
 
 		if isinstance(circuit, int):
 			glob.new_circuit(circuit, colors)
@@ -79,25 +116,45 @@ class Scene(QGraphicsScene):
 		g = GateItem(gate, pos)
 		self.gates[gate] = g
 		self.addItem(g)
+		return g
 
 	def _add_wire_item(self, wire, start, end):
 		w = WireItem(wire, start, end)
-		self.wires[wire] = w
 		self.addItem(w)
 
 		if glob.wire_colors:
 			self.circuit_changed.connect(w.determine_color)
 		self.scene_changed.connect(w.update_path)
 
+		return w
+
+	def remove_gate_item(self, g):
+		del self.gates[g.gate]
+		for port in g.in_ports + g.out_ports:
+			if port.wire:
+				self.remove_wire_item(port.wire)
+		glob.circuit.remove_gate(g.gate)
+		self.removeItem(g)
+		del g
+
+	def remove_wire_item(self, w):
+		w.start.disconnect()
+		w.end.disconnect()
+		glob.circuit.remove_wire(w.wire)
+		self.removeItem(w)
+		del w
+
 	def add_gate(self, gate_type, pos):
 		gate = glob.circuit.add_gate(gate_type)
-		self._add_gate_item(gate, pos)
+		item = self._add_gate_item(gate, pos)
 		self.circuit_changed.emit()
+		return item
 
 	def add_wire(self, start, end):
 		wire = glob.circuit.add_wire(*self._find_start_end_components_and_ports(start, end))
-		self._add_wire_item(wire, start, end)
+		item = self._add_wire_item(wire, start, end)
 		self.circuit_changed.emit()
+		return item
 
 	def _find_start_end(self, wire):
 		if wire.left is glob.circuit:
@@ -262,17 +319,12 @@ class Scene(QGraphicsScene):
 		if e.matches(QKeySequence.Delete) and self.selectedItems():
 			for item in self.selectedItems():
 				if isinstance(item, GateItem):
-					del self.gates[item.gate]
-					for w in item.gate.in_wires + item.gate.out_wires:
-						if w:
-							self.removeItem(self.wires[w])
-							del self.wires[w]
-					glob.circuit.remove_gate(item.gate)
-				else:
-					glob.circuit.remove_wire(item.wire)
-				self.removeItem(item)
-				del item
+					self.remove_gate_item(item)
+				elif isinstance(item, WireItem):
+					self.remove_wire_item(item)
 			e.accept()
 			self.circuit_changed.emit()
+		elif e.matches(QKeySequence.Cancel):
+			self.build_wire(None)
 		else:
 			e.ignore()
