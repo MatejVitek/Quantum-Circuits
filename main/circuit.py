@@ -451,6 +451,8 @@ class Circuit(object):
 
 # Abstract base class for gates
 class Gate(abc.ABC):
+    SIZE = 1
+
     def __init__(self, mtrx, name):
         if len(mtrx)!=len(mtrx.rows[0]):
             raise RuntimeError("Gates should be represented by square matrices.")
@@ -536,9 +538,11 @@ class QFT(Gate):
         super().__init__(Matrix.QFT(size), name)
 
 class CNot(Gate):
+    SIZE = 2
     def __init__(self, name="CNot"):
         super().__init__(Matrix.Cnot(), name)
 
 class T(Gate):
+    SIZE = 3
     def __init__(self, name="T"):
         super().__init__(Matrix.T(), name)
