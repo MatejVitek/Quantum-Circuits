@@ -217,11 +217,6 @@ class Circuit(object):
                 unchecked.discard(w.right)
                 if self._dfs(w.right, w, unchecked, new_visited):
                     return True
-        for w in g.in_wires:
-            if w is not None and w is not last_wire and w.left is not self:
-                unchecked.discard(w.left)
-                if self._dfs(w.left, w, unchecked, new_visited):
-                    return True
         return False
 
     # Run the circuit and return the computed output vector
