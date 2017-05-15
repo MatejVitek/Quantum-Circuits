@@ -79,8 +79,10 @@ class WireItem(QGraphicsPathItem):
 		self.setPen(QPen(QBrush(Qt.black), WIDTH))
 
 	def determine_color(self):
+		if glob.circuit.contains_cycle():
+			return
+
 		wire = self.wire
-		visited_gates = set()
 		color = Qt.black
 
 		while True:
@@ -93,11 +95,6 @@ class WireItem(QGraphicsPathItem):
 				color = glob.wire_colors[wire.lind]
 				break
 
-			# Stop if there's a cycle (prevent infinite loops).
-			if wire.left is None or wire.left in visited_gates:
-				break
-
-			visited_gates.add(wire.left)
 			wire = wire.left.in_wires[wire.lind]
 
 		pen = self.pen()
