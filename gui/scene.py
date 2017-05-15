@@ -31,21 +31,60 @@ class Scene(QGraphicsScene):
 		self.gates = None
 		self.new(create_test_circuit(), [Qt.black, Qt.red, Qt.blue, Qt.darkGreen, Qt.magenta, Qt.darkCyan])
 
+		self.partial_gate = None
 		self.partial_wire = None
 
 		self.setSceneRect(QRectF(-1e6, -1e6, 2e6, 2e6))
 
+	def new(self, circuit, colors=None):
+		self.blockSignals(True)
+
+		self.gates = {}
+		self.clear()
+		self.partial_wire = None
+
+		if isinstance(circuit, int):
+			glob.new_circuit(circuit, colors)
+			self._add_io_items(circuit)
+
+		else:
+			glob.set_circuit(circuit, colors)
+			self._add_io_items(len(circuit))
+
+			for gate in circuit.gates:
+				self._add_gate_item(gate)
+
+			for wire in circuit.wires:
+				self._add_wire_item(wire, *self._find_start_end(wire))
+
+			self.prettify()
+
+		self.blockSignals(False)
+		self.new_circuit.emit()
+
 	def check_circuit(self):
 		self.circuit_ok.emit(glob.circuit.check())
 
-	def prettify(self):
-		self._prettify()
-		self.scene_changed.emit()
+	def build_gate(self, pos, gate_type=None):
+		if pos is None:
+			if self.partial_gate is not None:
+				self.removeItem(self.partial_gate)
+				self.partial_gate = None
+
+		else:
+			if self.partial_gate is None:
+				height = gate_type.SIZE * UNIT if gate_type else UNIT
+				self.partial_gate = QGraphicsRectItem(QRectF(0, 0, UNIT, height))
+				self.partial_gate.setBrush(QBrush(Qt.white))
+				self.addItem(self.partial_gate)
+			pos -= QPointF(self.partial_gate.boundingRect().width(), self.partial_gate.boundingRect().height()) / 2
+			self.partial_gate.setPos(pos)
 
 	def build_wire(self, port):
 		if port is None:
-			self.removeItem(self.partial_wire)
-			self.partial_wire = None
+			if self.partial_wire is not None:
+				self.removeItem(self.partial_wire)
+				self.partial_wire = None
 
 		elif self.partial_wire is None:
 			self.partial_wire = PartialWireItem(port)
@@ -77,32 +116,6 @@ class Scene(QGraphicsScene):
 			end is not None and isinstance(end.parentItem(), GateItem) and end in end.parentItem().out_ports
 		)
 
-	def new(self, circuit, colors=None):
-		self.blockSignals(True)
-
-		self.gates = {}
-		self.clear()
-		self.partial_wire = None
-
-		if isinstance(circuit, int):
-			glob.new_circuit(circuit, colors)
-			self._add_io_items(circuit)
-
-		else:
-			glob.set_circuit(circuit, colors)
-			self._add_io_items(len(circuit))
-
-			for gate in circuit.gates:
-				self._add_gate_item(gate)
-
-			for wire in circuit.wires:
-				self._add_wire_item(wire, *self._find_start_end(wire))
-
-			self._prettify()
-
-		self.blockSignals(False)
-		self.new_circuit.emit()
-
 	def _add_io_items(self, size):
 		self.input = InputItem(size)
 		self.addItem(self.input)
@@ -112,10 +125,11 @@ class Scene(QGraphicsScene):
 		self.addItem(self.output)
 		self.output.setPos(10 * UNIT, 0)
 
-	def _add_gate_item(self, gate, pos=(0, 0)):
-		g = GateItem(gate, pos)
+	def _add_gate_item(self, gate):
+		g = GateItem(gate)
 		self.gates[gate] = g
 		self.addItem(g)
+		self.circuit_changed.connect(g.update_text)
 		return g
 
 	def _add_wire_item(self, wire, start, end):
@@ -146,7 +160,8 @@ class Scene(QGraphicsScene):
 
 	def add_gate(self, gate_type, pos):
 		gate = glob.circuit.add_gate(gate_type)
-		item = self._add_gate_item(gate, pos)
+		item = self._add_gate_item(gate)
+		item.setPos(pos - QPointF(item.boundingRect().width(), item.boundingRect().height()) / 2)
 		self.circuit_changed.emit()
 		return item
 
@@ -182,7 +197,7 @@ class Scene(QGraphicsScene):
 			end_port = end.parentItem().in_ports.index(end)
 		return start_component, start_port, end_component, end_port
 
-	def _prettify(self):
+	def prettify(self):
 		circuit = glob.circuit
 		slices = self.slice_up(circuit)
 
@@ -199,6 +214,8 @@ class Scene(QGraphicsScene):
 				gate_item.setPos(x, pos[i])
 
 			x += 2 * UNIT
+
+		self.scene_changed.emit()
 
 	def slice_up(self, circuit):
 		remaining = set(circuit.gates)
@@ -326,5 +343,12 @@ class Scene(QGraphicsScene):
 			self.circuit_changed.emit()
 		elif e.matches(QKeySequence.Cancel):
 			self.build_wire(None)
+			e.accept()
 		else:
 			e.ignore()
+
+	def mousePressEvent(self, e):
+		if e.button() == Qt.RightButton and self.partial_wire:
+			self.build_wire(None)
+			e.accept()
+		return super().mousePressEvent(e)

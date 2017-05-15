@@ -1,3 +1,5 @@
+import pickle
+
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
@@ -8,6 +10,7 @@ class View(QGraphicsView):
 		super().__init__(*args)
 		self.centerOn(self.scene().itemsBoundingRect().center())
 		self.setRenderHint(QPainter.Antialiasing)
+		self.setAcceptDrops(True)
 
 		self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
 		self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -27,7 +30,6 @@ class View(QGraphicsView):
 		steps = degrees / 15.
 		scale = 1.1 ** steps
 		self.scale(scale, scale)
-
 		e.accept()
 
 	def enterEvent(self, *args):
@@ -50,3 +52,22 @@ class View(QGraphicsView):
 			self.viewport().unsetCursor()
 			if self.scene().partial_wire is not None:
 				self.scene().partial_wire.update_path(self.mapToScene(e.pos()))
+		e.accept()
+
+	def dragEnterEvent(self, e):
+		if e.mimeData().hasFormat('application/gate-type'):
+			gate_type = pickle.loads(e.mimeData().data('application/gate-type'))
+			self.scene().build_gate(self.mapToScene(e.pos()), gate_type)
+			e.accept()
+		else:
+			return super().dragEnterEvent(e)
+
+	def dragMoveEvent(self, e):
+		self.scene().build_gate(self.mapToScene(e.pos()))
+		e.accept()
+
+	def dropEvent(self, e):
+		self.scene().build_gate(None)
+		gate_type = pickle.loads(e.mimeData().data('application/gate-type'))
+		self.scene().add_gate(gate_type, self.mapToScene(e.pos()))
+		e.accept()
