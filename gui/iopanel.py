@@ -64,10 +64,7 @@ class InputField(QWidget):
 		self.label.setAlignment(Qt.AlignCenter)
 		self.label.setFixedSize(QSize(20, 20))
 		self.label.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
-		p = self.label.palette()
-		p.setColor(self.label.backgroundRole(), Qt.white)
-		self.label.setPalette(p)
-		self.label.setAutoFillBackground(True)
+		glob.set_background_color(self.label, Qt.white)
 
 		self.button = QPushButton(self)
 		self.button.setFixedSize(QSize(20, 15))
@@ -103,11 +100,7 @@ class OutputField(QWidget):
 		self.label.setAlignment(Qt.AlignCenter)
 		self.label.setFixedSize(QSize(20, 20))
 		self.label.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
-
-		p = self.label.palette()
-		p.setColor(self.label.backgroundRole(), Qt.white)
-		self.label.setPalette(p)
-		self.label.setAutoFillBackground(True)
+		glob.set_background_color(self.label, Qt.white)
 
 		hbox = QHBoxLayout(self)
 		hbox.setContentsMargins(0, 0, 0, 0)

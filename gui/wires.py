@@ -202,7 +202,7 @@ class WireItem(QGraphicsPathItem):
 		return self._shape
 
 	def _stroke_path(self):
-		pen = QPen(QBrush(Qt.black), self.pen().widthF() + 20, Qt.SolidLine)
+		pen = QPen(QBrush(Qt.black), self.pen().widthF() + 15, Qt.SolidLine)
 		stroker = QPainterPathStroker()
 		stroker.setCapStyle(pen.capStyle())
 		stroker.setJoinStyle(pen.joinStyle())

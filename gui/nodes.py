@@ -13,7 +13,10 @@ FONT = QFont("Courier", 10)			# The font used for gate names etc.
 
 class IOItem(QGraphicsRectItem, abc.ABC, metaclass=glob.AbstractWidgetMeta):
 	def __init__(self, pos, width, circuit_size, panel_type, port_align, *args):
+		if isinstance(pos, QPoint) or isinstance(pos, QPointF):
+			pos = pos.x(), pos.y()
 		super().__init__(QRectF(*pos, width, circuit_size * UNIT), *args)
+
 		self.setFlag(QGraphicsItem.ItemIsMovable)
 		self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges)
 		self.setZValue(1)
@@ -35,6 +38,11 @@ class IOItem(QGraphicsRectItem, abc.ABC, metaclass=glob.AbstractWidgetMeta):
 			self.scene().scene_changed.emit()
 		return QGraphicsItem.itemChange(self, change, value)
 
+	def mousePressEvent(self, *args):
+		for item in self.scene().selectedItems():
+			item.setSelected(False)
+		super().mousePressEvent(*args)
+
 
 class InputItem(IOItem):
 	def __init__(self, size, pos=(0, 0), *args):
@@ -48,7 +56,10 @@ class OutputItem(IOItem):
 
 class GateItem(QGraphicsRectItem):
 	def __init__(self, gate, pos=(0, 0), *args):
+		if isinstance(pos, QPoint) or isinstance(pos, QPointF):
+			pos = pos.x(), pos.y()
 		super().__init__(*pos, UNIT, len(gate) * UNIT, *args)
+
 		self.setFlag(QGraphicsItem.ItemIsMovable)
 		self.setFlag(QGraphicsItem.ItemIsSelectable)
 		self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges)
@@ -79,6 +90,8 @@ class PortItem(QGraphicsEllipseItem):
 	def __init__(self, center, *args):
 		super().__init__(glob.create_square(center, self.SIZE), *args)
 		self.wire = None
+		self.setAcceptHoverEvents(True)
+
 		self.center = center
 		self.setTransformOriginPoint(self.center)
 		self.setPen(QPen(Qt.NoPen))

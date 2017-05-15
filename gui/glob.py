@@ -34,12 +34,9 @@ def set_circuit(c, colors=None):
 def set_wire_colors(colors):
 	global wire_colors
 
-	# Argument None means leave colors as they are. If sizes don't match, pad or delete extras.
+	# Argument None means leave colors as they are. If new circuit size is larger, pad with randoms.
 	if colors is None:
-		if wire_colors is not None:
-			if len(wire_colors) > len(circuit):
-				wire_colors = wire_colors[:len(circuit)]
-			elif len(wire_colors) < len(circuit):
+		if wire_colors is not None and len(wire_colors) < len(circuit):
 				wire_colors.extend(_rnd() for _ in range(len(circuit) - len(wire_colors)))
 
 	# Argument False means don't use colors.
