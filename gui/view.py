@@ -8,7 +8,8 @@ from PyQt5.QtCore import *
 class View(QGraphicsView):
 	def __init__(self, *args):
 		super().__init__(*args)
-		self.centerOn(self.scene().itemsBoundingRect().center())
+		self.center()
+		self.scene().new_circuit.connect(self.center)
 		self.setRenderHint(QPainter.Antialiasing)
 		self.setAcceptDrops(True)
 
@@ -20,6 +21,9 @@ class View(QGraphicsView):
 
 	def setScene(self, scene):
 		super().setScene(scene)
+		self.scene().new_circuit.connect(self.center)
+
+	def center(self):
 		self.centerOn(self.scene().itemsBoundingRect().center())
 
 	def fit_to_scene(self):
