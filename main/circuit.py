@@ -97,7 +97,29 @@ class Circuit(object):
 
     def get_internal_wires(self):
         return [wire for wire in self.wires if wire.is_internal()]
-    
+
+    # Remove a gate and the wires connected to it
+    def remove_gate(self, g):
+        if not g:
+            return
+        for w in g.in_wires + g.out_wires:
+            self.remove_wire(w)
+        self.gates.remove(g)
+
+    # Remove a single wire
+    def remove_wire(self, w):
+        if not w:
+            return
+        if w.left is self:
+            self.input[w.lind] = None
+        elif w.left:
+            w.left.out_wires[w.lind] = None
+        if w.right is self:
+            w.right.output[w.rind] = None
+        elif w.right:
+            w.right.in_wires[w.rind] = None
+        self.wires.remove(w)
+
     #this is the prefered method for implementing subcircuits. It compresses the whole circuit into
     #one matrix and returns a gate associated with it
     def get_subcircuit(self,name):
@@ -172,9 +194,30 @@ class Circuit(object):
             all(wire is not None for wire in self.input) and
             all(wire is not None for wire in self.output) and
             all(wire is not None for gate in self.gates for wire in gate.in_wires) and
-            all(wire is not None for gate in self.gates for wire in gate.out_wires)
+            all(wire is not None for gate in self.gates for wire in gate.out_wires) and
+            not self.contains_cycle()
         )
         # TODO: Possibly other checks
+
+    # Check if the circuit contains a cycle
+    def contains_cycle(self):
+        unchecked = {g for g in self.gates}
+        while unchecked:
+            g = unchecked.pop()
+            if self._dfs(g, None, unchecked, set()):
+                return True
+        return False
+
+    def _dfs(self, g, last_wire, unchecked, visited):
+        if g in visited:
+            return True
+        new_visited = visited | {g}
+        for w in g.out_wires:
+            if w is not None and w is not last_wire and w.right is not self:
+                unchecked.discard(w.right)
+                if self._dfs(w.right, w, unchecked, new_visited):
+                    return True
+        return False
 
     # Run the circuit and return the computed output vector
     #method1 is the Feynman approach
@@ -403,6 +446,8 @@ class Circuit(object):
 
 # Abstract base class for gates
 class Gate(abc.ABC):
+    SIZE = 1
+
     def __init__(self, mtrx, name):
         if len(mtrx)!=len(mtrx.rows[0]):
             raise RuntimeError("Gates should be represented by square matrices.")
@@ -488,9 +533,11 @@ class QFT(Gate):
         super().__init__(Matrix.QFT(size), name)
 
 class CNot(Gate):
+    SIZE = 2
     def __init__(self, name="CNot"):
         super().__init__(Matrix.Cnot(), name)
 
 class T(Gate):
+    SIZE = 3
     def __init__(self, name="T"):
         super().__init__(Matrix.T(), name)

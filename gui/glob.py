@@ -1,8 +1,5 @@
 from main.circuit import Circuit
 
-from abc import ABCMeta
-from numbers import Real
-from operator import mul, truediv
 from random import randint
 
 from PyQt5.QtGui import *
@@ -34,12 +31,9 @@ def set_circuit(c, colors=None):
 def set_wire_colors(colors):
 	global wire_colors
 
-	# Argument None means leave colors as they are. If sizes don't match, pad or delete extras.
+	# Argument None means leave colors as they are. If new circuit size is larger, pad with randoms.
 	if colors is None:
-		if wire_colors is not None:
-			if len(wire_colors) > len(circuit):
-				wire_colors = wire_colors[:len(circuit)]
-			elif len(wire_colors) < len(circuit):
+		if wire_colors is not None and len(wire_colors) < len(circuit):
 				wire_colors.extend(_rnd() for _ in range(len(circuit) - len(wire_colors)))
 
 	# Argument False means don't use colors.
@@ -71,7 +65,7 @@ class VectorObject(QObject):
 		self._vector = [0] * size
 
 	def __str__(self):
-		return "".join(str(i) for i in self)
+		return "".join(map(str, self))
 
 	def __len__(self):
 		return len(self._vector)
@@ -81,13 +75,13 @@ class VectorObject(QObject):
 
 	def __setitem__(self, key, val):
 		try:
-			map(int, val)
+			val = [int(v) for v in val]
 			if any(v not in (0, 1) for v in val):
-				raise RuntimeError("Only binary values allowed.")
+				raise ValueError("Only binary values allowed.")
 		except TypeError:
 			val = int(val)
 			if val not in (0, 1):
-				raise RuntimeError("Only binary values allowed.")
+				raise ValueError("Only binary values allowed.")
 
 		self._vector[key] = val
 		self.changed.emit(key, val)
@@ -100,34 +94,3 @@ class VectorObject(QObject):
 
 	def toggle(self, i):
 		self[i] = 1 - self[i]
-
-
-class AbstractWidgetMeta(pyqtWrapperType, ABCMeta):
-	pass
-
-
-def set_background_color(widget, color):
-	p = widget.palette()
-	p.setColor(widget.backgroundRole(), color)
-	widget.setPalette(p)
-	widget.setAutoFillBackground(True)
-
-
-def create_square(center, size):
-	return QRectF(center - QPointF(size/2, size/2), QSizeF(size, size))
-
-
-def _op(self, f, op):
-	if isinstance(f, Real):
-		return type(self)(op(self.x(), f), op(self.y(), f))
-	raise NotImplementedError
-
-
-QPointF.__mul__ = lambda self, f: _op(self, f, mul)
-QPointF.__rmul__ = lambda self, f: _op(self, f, mul)
-QPointF.__truediv__ = lambda self, f: _op(self, f, truediv)
-QPointF.__rtruediv__ = lambda self, f: _op(self, f, truediv)
-QPoint.__mul__ = lambda self, f: _op(self, f, mul)
-QPoint.__rmul__ = lambda self, f: _op(self, f, mul)
-QPoint.__truediv__ = lambda self, f: _op(self, f, truediv)
-QPoint.__rtruediv__ = lambda self, f: _op(self, f, truediv)

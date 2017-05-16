@@ -2,7 +2,7 @@ UNIT = 50							# Base unit, all sizing is based on this
 MIN_GAP = 0.25						# Minimum vertical gap between two gates = MIN_GAP * UNIT
 
 
-from .wires import WireItem
+from .wires import WireItem, PartialWireItem
 from .nodes import GateItem, InputItem, OutputItem
 from . import glob
 from main.test import create_test_circuit
@@ -17,6 +17,7 @@ class Scene(QGraphicsScene):
 	circuit_changed = pyqtSignal(name='circuitChanged')
 	scene_changed = pyqtSignal(name='sceneChanged')
 	circuit_ok = pyqtSignal(bool, name='circuitOK')
+	status = pyqtSignal(str, name='cycle')
 
 	def __init__(self, *args):
 		super().__init__(*args)
@@ -30,46 +31,173 @@ class Scene(QGraphicsScene):
 		self.gates = None
 		self.new(create_test_circuit(), [Qt.black, Qt.red, Qt.blue, Qt.darkGreen, Qt.magenta, Qt.darkCyan])
 
-		self.setSceneRect(QRectF(-1e6, -1e6, 2e6, 2e6))
+		self.partial_gate = None
+		self.partial_wire = None
 
-	def check_circuit(self):
-		self.circuit_ok.emit(glob.circuit.check())
+		self.setSceneRect(QRectF(-1e6, -1e6, 2e6, 2e6))
 
 	def new(self, circuit, colors=None):
 		self.blockSignals(True)
 
-		for item in self.items():
-			del item
 		self.gates = {}
+		self.clear()
+		self.partial_wire = None
 
 		if isinstance(circuit, int):
 			glob.new_circuit(circuit, colors)
+			self._add_io_items(circuit)
 
 		else:
 			glob.set_circuit(circuit, colors)
-
-			self.input = InputItem(len(circuit))
-			self.addItem(self.input)
-			self.output = OutputItem(len(circuit))
-			self.addItem(self.output)
+			self._add_io_items(len(circuit))
 
 			for gate in circuit.gates:
-				self.add_gate_item(gate)
+				self._add_gate_item(gate)
 
 			for wire in circuit.wires:
-				self.add_wire_item(wire, *self._find_start_end(wire))
+				self._add_wire_item(wire, *self._find_start_end(wire))
 
-			self._prettify()
+			self.prettify()
 
 		self.blockSignals(False)
 		self.new_circuit.emit()
 
-	def prettify(self):
-		self._prettify()
-		self.parent().view.fit_to_scene()
-		self.scene_changed.emit()
+	def check_circuit(self):
+		self.circuit_ok.emit(glob.circuit.check())
 
-	def _prettify(self):
+	def build_gate(self, pos, gate_type=None):
+		if pos is None:
+			if self.partial_gate is not None:
+				self.removeItem(self.partial_gate)
+				self.partial_gate = None
+
+		else:
+			if self.partial_gate is None:
+				height = gate_type.SIZE * UNIT if gate_type else UNIT
+				self.partial_gate = QGraphicsRectItem(QRectF(0, 0, UNIT, height))
+				self.partial_gate.setBrush(QBrush(Qt.white))
+				self.addItem(self.partial_gate)
+			pos -= QPointF(self.partial_gate.boundingRect().width(), self.partial_gate.boundingRect().height()) / 2
+			self.partial_gate.setPos(pos)
+
+	def build_wire(self, port):
+		if port is None:
+			if self.partial_wire is not None:
+				self.removeItem(self.partial_wire)
+				self.partial_wire = None
+
+		elif self.partial_wire is None:
+			self.partial_wire = PartialWireItem(port)
+			if self._invalid(port, None):
+				self.partial_wire.reverse = True
+			self.addItem(self.partial_wire)
+
+		else:
+			start = self.partial_wire.start
+			end = port
+			if self.partial_wire.reverse:
+				start, end = end, start
+			if start is end:
+				self.status.emit("Cannot connect port to itself.")
+			elif self._invalid(start, end):
+				self.status.emit("Connect an input port and an output port.")
+			else:
+				item = self.add_wire(start, end)
+				if glob.circuit.contains_cycle():
+					self.status.emit("Circuit should not contain cycles.")
+					self.remove_wire_item(item)
+			self.build_wire(None)
+
+	def _invalid(self, start, end):
+		return (
+			start is not None and start.parentItem() is self.output or
+			start is not None and isinstance(start.parentItem(), GateItem) and start in start.parentItem().in_ports or
+			end is not None and end.parentItem() is self.input or
+			end is not None and isinstance(end.parentItem(), GateItem) and end in end.parentItem().out_ports
+		)
+
+	def _add_io_items(self, size):
+		self.input = InputItem(size)
+		self.addItem(self.input)
+		self.input.setPos(0, 0)
+
+		self.output = OutputItem(size)
+		self.addItem(self.output)
+		self.output.setPos(10 * UNIT, 0)
+
+	def _add_gate_item(self, gate):
+		g = GateItem(gate)
+		self.gates[gate] = g
+		self.addItem(g)
+		self.circuit_changed.connect(g.update_text)
+		return g
+
+	def _add_wire_item(self, wire, start, end):
+		w = WireItem(wire, start, end)
+		self.addItem(w)
+
+		if glob.wire_colors:
+			self.circuit_changed.connect(w.determine_color)
+		self.scene_changed.connect(w.update_path)
+
+		return w
+
+	def remove_gate_item(self, g):
+		del self.gates[g.gate]
+		for port in g.in_ports + g.out_ports:
+			if port.wire:
+				self.remove_wire_item(port.wire)
+		glob.circuit.remove_gate(g.gate)
+		self.removeItem(g)
+		del g
+
+	def remove_wire_item(self, w):
+		w.start.disconnect()
+		w.end.disconnect()
+		glob.circuit.remove_wire(w.wire)
+		self.removeItem(w)
+		del w
+
+	def add_gate(self, gate_type, pos):
+		gate = glob.circuit.add_gate(gate_type)
+		item = self._add_gate_item(gate)
+		item.setPos(pos - QPointF(item.boundingRect().width(), item.boundingRect().height()) / 2)
+		self.circuit_changed.emit()
+		return item
+
+	def add_wire(self, start, end):
+		wire = glob.circuit.add_wire(*self._find_start_end_components_and_ports(start, end))
+		item = self._add_wire_item(wire, start, end)
+		self.circuit_changed.emit()
+		return item
+
+	def _find_start_end(self, wire):
+		if wire.left is glob.circuit:
+			start = self.input.ports[wire.lind]
+		else:
+			start = self.gates[wire.left].out_ports[wire.lind]
+		if wire.right is glob.circuit:
+			end = self.output.ports[wire.rind]
+		else:
+			end = self.gates[wire.right].in_ports[wire.rind]
+		return start, end
+
+	def _find_start_end_components_and_ports(self, start, end):
+		if start.parentItem() is self.input:
+			start_component = glob.circuit
+			start_port = start.parentItem().ports.index(start)
+		else:
+			start_component = start.parentItem().gate
+			start_port = start.parentItem().out_ports.index(start)
+		if end.parentItem() is self.output:
+			end_component = glob.circuit
+			end_port = end.parentItem().ports.index(end)
+		else:
+			end_component = end.parentItem().gate
+			end_port = end.parentItem().in_ports.index(end)
+		return start_component, start_port, end_component, end_port
+
+	def prettify(self):
 		circuit = glob.circuit
 		slices = self.slice_up(circuit)
 
@@ -86,6 +214,8 @@ class Scene(QGraphicsScene):
 				gate_item.setPos(x, pos[i])
 
 			x += 2 * UNIT
+
+		self.scene_changed.emit()
 
 	def slice_up(self, circuit):
 		remaining = set(circuit.gates)
@@ -202,51 +332,23 @@ class Scene(QGraphicsScene):
 
 		return pos
 
-	def add_gate_item(self, gate, pos=(0, 0)):
-		g = GateItem(gate, pos)
-		self.gates[gate] = g
-		self.addItem(g)
-
-	def add_wire_item(self, wire, start, end):
-		w = WireItem(wire, start, end)
-		self.addItem(w)
-
-		if glob.wire_colors:
-			self.circuit_changed.connect(w.determine_color)
-		self.scene_changed.connect(w.update_path)
-
-	def add_gate(self, gate_type, pos):
-		gate = glob.circuit.add_gate(gate_type)
-		self.add_gate_item(gate, pos)
-		self.circuit_changed.emit()
-
-	def add_wire(self, start, end):
-		wire = glob.circuit.add_wire(*self._find_start_end_components_and_ports(start, end))
-		self._add_wire_item(wire, start, end)
-		self.circuit_changed.emit()
-
-	def _find_start_end(self, wire):
-		if wire.left is glob.circuit:
-			start = self.input.ports[wire.lind]
+	def keyPressEvent(self, e):
+		if e.matches(QKeySequence.Delete) and self.selectedItems():
+			for item in self.selectedItems():
+				if isinstance(item, GateItem):
+					self.remove_gate_item(item)
+				elif isinstance(item, WireItem):
+					self.remove_wire_item(item)
+			e.accept()
+			self.circuit_changed.emit()
+		elif e.matches(QKeySequence.Cancel):
+			self.build_wire(None)
+			e.accept()
 		else:
-			start = self.gates[wire.left].out_ports[wire.lind]
-		if wire.right is glob.circuit:
-			end = self.output.ports[wire.rind]
-		else:
-			end = self.gates[wire.right].in_ports[wire.rind]
-		return start, end
+			e.ignore()
 
-	def _find_start_end_components_and_ports(self, start, end):
-		if start.parentItem() is self.input:
-			start_component = glob.circuit
-			start_port = start.parentItem().ports.index(start)
-		else:
-			start_component = start.parentItem().gate
-			start_port = start.parentItem().out_ports.index(start)
-		if end.parentItem() is self.output:
-			end_component = glob.circuit
-			end_port = end.parentItem().ports.index(end)
-		else:
-			end_component = end.parentItem().gate
-			end_port = end.parentItem().in_ports.index(end)
-		return start_component, start_port, end_component, end_port
+	def mousePressEvent(self, e):
+		if e.button() == Qt.RightButton and self.partial_wire:
+			self.build_wire(None)
+			e.accept()
+		return super().mousePressEvent(e)

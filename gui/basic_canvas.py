@@ -1,4 +1,4 @@
-from . import glob
+from . import glob, utils
 from .iopanel import InputPanel, OutputPanel
 
 from PyQt5.QtWidgets import *
@@ -25,7 +25,7 @@ class Scene(QWidget):
 	def __init__(self, *args):
 		super().__init__(*args)
 		self.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
-		glob.set_background_color(self, Qt.white)
+		utils.set_background_color(self, Qt.white)
 
 	def sizeHint(self):
 		return QSize(1e6, 1e6)
