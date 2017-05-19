@@ -5,6 +5,7 @@ MIN_GAP = 0.25						# Minimum vertical gap between two gates = MIN_GAP * UNIT
 from .wires import WireItem, PartialWireItem
 from .nodes import GateItem, InputItem, OutputItem
 from . import glob
+from main import Grover
 from main.test import create_test_circuit
 
 from PyQt5.QtWidgets import *
@@ -29,7 +30,8 @@ class Scene(QGraphicsScene):
 		self.input = None
 		self.output = None
 		self.gates = None
-		self.new(create_test_circuit(), [Qt.black, Qt.red, Qt.blue, Qt.darkGreen, Qt.magenta, Qt.darkCyan])
+		#self.new(create_test_circuit(), [Qt.black, Qt.red, Qt.blue, Qt.darkGreen, Qt.magenta, Qt.darkCyan])
+		self.new(Grover.c, [])
 
 		self.partial_gate = None
 		self.partial_wire = None

@@ -1,5 +1,5 @@
-from circuit import*
-from matrix import Matrix, tensor
+from main.circuit import*
+from main.matrix import Matrix, tensor
 from math import pi, sqrt
 
 #Grovers algorithm finds an x for which the function f: {0,1,...,2^n -1}-->{0,1} is 1.
@@ -44,7 +44,7 @@ for t in range(times):
     h3=c.add(Gate(tensor([Matrix.H(n),Matrix.Id(2)]),'h2'+str(t)))
     c.add_wires(u2, (), h3, ())
     h1=h3
-    
+
 c.add_wires(h1, (), c, ())  
 
 gatesize=0
