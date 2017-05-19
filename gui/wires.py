@@ -109,7 +109,7 @@ class WireItem(QGraphicsPathItem):
 		sink = self.end.center_scene_pos()
 		path = path_between(source, sink)
 
-		if AVOID_PORTS:
+		if AVOID_PORTS and len(glob.circuit.wires) < 40:
 			gates = self.scene().gates.values()
 			in_ports = {p for g in gates for p in g.in_ports if p is not self.end}
 			out_ports = {p for g in gates for p in g.out_ports if p is not self.start}
