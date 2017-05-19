@@ -8,6 +8,8 @@ from . import glob
 from main import Grover
 from main.test import create_test_circuit
 
+import pickle
+
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
@@ -53,7 +55,7 @@ class Scene(QGraphicsScene):
 			glob.set_circuit(circuit, colors)
 			self._add_io_items(len(circuit))
 
-			for gate in circuit.gates:
+			for gate in circuit:
 				self._add_gate_item(gate)
 
 			for wire in circuit.wires:
@@ -63,6 +65,29 @@ class Scene(QGraphicsScene):
 
 		self.blockSignals(False)
 		self.new_circuit.emit()
+
+	def save(self, fname):
+		with open(fname, 'wb') as f:
+			pickle.dump(glob.circuit, f)
+			pickle.dump(glob.wire_colors, f)
+			pickle.dump(self.input.scenePos(), f)
+			pickle.dump(self.output.scenePos(), f)
+			pickle.dump({g: self.gates[g].scenePos() for g in glob.circuit}, f)
+
+	def load(self, fname):
+		with open(fname, 'rb') as f:
+			circuit = pickle.load(f)
+			colors = pickle.load(f)
+			input_pos = pickle.load(f)
+			output_pos = pickle.load(f)
+			g_pos = pickle.load(f)
+
+		self.new(circuit, colors if colors else False)
+		self.input.setPos(input_pos)
+		self.output.setPos(output_pos)
+		for g in glob.circuit:
+			self.gates[g].setPos(g_pos[g])
+		self.scene_changed.emit()
 
 	def check_circuit(self):
 		self.circuit_ok.emit(glob.circuit.check())

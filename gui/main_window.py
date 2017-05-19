@@ -121,6 +121,16 @@ class MenuBar(QMenuBar):
 		self.new.setToolTip("Open a new blank circuit")
 		self.new.triggered.connect(self.new_dialog)
 
+		self.save = QAction("Save", self)
+		self.save.setShortcut(QKeySequence.Save)
+		self.save.setToolTip("Save current circuit")
+		self.save.triggered.connect(self.save_dialog)
+
+		self.open = QAction("Open", self)
+		self.open.setShortcut(QKeySequence.Open)
+		self.open.setToolTip("Open circuit file")
+		self.open.triggered.connect(self.open_dialog)
+
 		self.exit = QAction("Exit", self)
 		self.exit.setShortcut(QKeySequence.Quit)
 		self.exit.setToolTip("Exit application")
@@ -128,6 +138,9 @@ class MenuBar(QMenuBar):
 
 		self.file = self.addMenu("File")
 		self.file.addAction(self.new)
+		self.file.addSeparator()
+		self.file.addAction(self.save)
+		self.file.addAction(self.open)
 		self.file.addSeparator()
 		self.file.addAction(self.exit)
 
@@ -153,13 +166,13 @@ class MenuBar(QMenuBar):
 		self.circuit.addAction(self.set_input)
 
 	def new_dialog(self):
-		size, ok = QInputDialog.getInt(self, "Size", "Set circuit size", len(glob.circuit), 1)
+		size, ok = QInputDialog.getInt(self.parent(), "Size", "Set circuit size", len(glob.circuit), 1)
 		if ok:
 			self.parent().canvas.scene.new(size)
 
 	def input_dialog(self):
 		while True:
-			text, ok = QInputDialog.getText(self, "Set Input", "Input vector:", text=str(glob.in_vector))
+			text, ok = QInputDialog.getText(self.parent(), "Set Input", "Input vector:", text=str(glob.in_vector))
 			if not ok:
 				break
 			if len(text) != len(glob.circuit):
@@ -170,6 +183,16 @@ class MenuBar(QMenuBar):
 					break
 				except ValueError:
 					QMessageBox.warning(self, "Illegal Value", "Only binary values are allowed.")
+
+	def save_dialog(self):
+		fname, _ = QFileDialog.getSaveFileName(self.parent(), "Save", "../Resources/Saved/", "Circuits (*.cir)")
+		if fname:
+			self.parent().canvas.scene.save(fname)
+
+	def open_dialog(self):
+		fname, _ = QFileDialog.getOpenFileName(self.parent(), "Open", "../Resources/Saved/", "Circuits (*.cir)")
+		if fname:
+			self.parent().canvas.scene.load(fname)
 
 
 class BuildToolBar(PanelToolBar):
