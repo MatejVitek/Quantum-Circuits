@@ -1,6 +1,3 @@
-import abc
-import random
-import string
 from main.matrix import Matrix, tensor
 from collections import Counter
 from itertools import product
@@ -40,8 +37,8 @@ class Circuit(object):
     def __len__(self):
         return len(self.input)
 
-    def __str__(self):
-        return "C"
+    def __iter__(self):
+        return iter(self.gates)
 
     # Add component (gate or subcircuit - subcircuits are simply treated as gates everywhere else though)
     def add(self, component):
@@ -193,30 +190,30 @@ class Circuit(object):
         return (
             all(wire is not None for wire in self.input) and
             all(wire is not None for wire in self.output) and
-            all(wire is not None for gate in self.gates for wire in gate.in_wires) and
-            all(wire is not None for gate in self.gates for wire in gate.out_wires) and
+            all(wire is not None for gate in self for wire in gate.in_wires) and
+            all(wire is not None for gate in self for wire in gate.out_wires) and
             not self.contains_cycle()
         )
-        # TODO: Possibly other checks
 
     # Check if the circuit contains a cycle
     def contains_cycle(self):
-        unchecked = {g for g in self.gates}
+        unchecked = {g for g in self}
         while unchecked:
             g = unchecked.pop()
-            if self._dfs(g, None, unchecked, set()):
+            if self._dfs(g, unchecked, set()):
                 return True
         return False
 
-    def _dfs(self, g, last_wire, unchecked, visited):
-        if g in visited:
-            return True
-        new_visited = visited | {g}
+    def _dfs(self, g, unchecked, visited):
+        visited = visited | {g}
         for w in g.out_wires:
-            if w is not None and w is not last_wire and w.right is not self:
-                unchecked.discard(w.right)
-                if self._dfs(w.right, w, unchecked, new_visited):
+            if w is not None and w.right is not self:
+                if w.right in visited:
                     return True
+                if w.right in unchecked:
+                    unchecked.remove(w.right)
+                    if self._dfs(w.right, unchecked, visited):
+                        return True
         return False
 
     # Run the circuit and return the computed output vector
@@ -444,8 +441,8 @@ class Circuit(object):
         
         return c
 
-# Abstract base class for gates
-class Gate(abc.ABC):
+
+class Gate(object):
     SIZE = 1
 
     def __init__(self, mtrx, name):
@@ -496,7 +493,7 @@ class Gate(abc.ABC):
         self.parent = parent
         self.id = parent.cls_ids[self.name]
         self.uuid = uuid4()
-        while any(g.uuid == self.uuid for g in parent.gates if g is not self):
+        while any(g.uuid == self.uuid for g in parent if g is not self):
             self.uuid = uuid4()
         
     def get_matrix(self):
