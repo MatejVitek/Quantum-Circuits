@@ -3,8 +3,10 @@ from . import canvas, glob, utils
 from main.circuit import Gate
 
 import abc
+from functools import partial
 import inspect
 import pickle
+from os.path import basename
 import sys
 
 from PyQt5.QtWidgets import *
@@ -31,9 +33,13 @@ class MainWindow(QMainWindow):
 		self.addToolBar(Qt.BottomToolBarArea, self.run_panel)
 
 		scene = self.canvas.scene
-		self.in_panel = None
-		self.out_panel = None
-		scene.new_circuit.connect(self.refresh)
+		self.in_panel = IOToolBar(InputPanel, self)
+		self.out_panel = IOToolBar(OutputPanel, self)
+		scene.new_circuit.connect(self.update_panels)
+		self.addToolBar(Qt.LeftToolBarArea, self.in_panel)
+		self.addToolBar(Qt.RightToolBarArea, self.out_panel)
+		self.in_panel.hide()
+		self.out_panel.hide()
 
 		self.menu_bar = MenuBar(self)
 		self.setMenuBar(self.menu_bar)
@@ -41,34 +47,22 @@ class MainWindow(QMainWindow):
 		scene.circuit_changed.connect(self.statusBar().clearMessage)
 		scene.status.connect(self.statusBar().showMessage)
 
-		self.setWindowTitle("Quantum Circuits")
+		self.set_file(None)
+		scene.scene_changed.connect(partial(self.setWindowModified, True))
+
 		self.setWindowIcon(QIcon("../Resources/Icon.png"))
 		self.reset_placement()
 
-	def set_visible(self, panel, visible):
-		if panel & Qt.LeftToolBarArea:
-			if visible and not self.in_panel:
-				self.in_panel = IOToolBar(InputPanel, self)
-				self.addToolBar(self.in_panel, Qt.LeftToolBarArea)
-			elif not visible and self.in_panel:
-				self.removeToolBar(self.in_panel)
-				self.in_panel.deleteLater()
-				self.in_panel = None
+	def set_file(self, fname):
+		self._file = fname
+		self.setWindowTitle("Quantum Circuits" + (" - " + basename(fname) if fname else "") + "[*]")
 
-		if panel & Qt.RightToolBarArea:
-			if visible and not self.out_panel:
-				self.out_panel = IOToolBar(OutputPanel, self)
-				self.addToolBar(self.out_panel, Qt.RightToolBarArea)
-			elif not visible and self.out_panel:
-				self.removeToolBar(self.out_panel)
-				self.out_panel.deleteLater()
-				self.out_panel = None
+	def current_file(self):
+		return self._file
 
-	def refresh(self):
-		panels = Qt.LeftToolBarArea if self.in_panel else 0
-		panels |= Qt.RightToolBarArea if self.out_panel else 0
-		self.set_visible(Qt.LeftToolBarArea | Qt.RightToolBarArea, False)
-		self.set_visible(panels, True)
+	def update_panels(self):
+		self.in_panel.update_panel()
+		self.out_panel.update_panel()
 
 	def run(self):
 		in_v = glob.in_vector.get()
@@ -77,8 +71,15 @@ class MainWindow(QMainWindow):
 
 	def reset_placement(self):
 		g = QDesktopWidget().availableGeometry()
-		self.resize(0.6 * g.width(), 0.6 * g.height())
-		self.move(g.center().x() - self.width()/2, g.center().y() - self.height()/2)
+		self.resize(int(0.6 * g.width()), int(0.6 * g.height()))
+		self.move(int(g.center().x() - self.width()/2), int(g.center().y() - self.height()/2))
+
+	def closeEvent(self, e):
+		if self.menu_bar.unsaved_dialog():
+			self.deleteLater()
+			e.accept()
+		else:
+			e.ignore()
 
 
 class PanelToolBar(QToolBar, abc.ABC, metaclass=utils.AbstractWidgetMeta):
@@ -108,8 +109,22 @@ class RunToolBar(PanelToolBar):
 class IOToolBar(PanelToolBar):
 	def __init__(self, panel_type, *args):
 		super().__init__(*args)
+		self.panel_type = panel_type
+		self.panel = None
+		w = QWidget(self)
+
+		self.layout = QHBoxLayout(w)
+		self.layout.setContentsMargins(0, 0, 0, 0)
+		self.addWidget(w)
+
+		self.update_panel()
+
+	def update_panel(self):
+		if self.panel:
+			self.layout.removeWidget(self.panel)
+			self.panel.deleteLater()
 		self.panel = self.panel_type(len(glob.circuit))
-		self.addWidget(self.panel)
+		self.layout.addWidget(self.panel)
 
 
 class MenuBar(QMenuBar):
@@ -124,7 +139,12 @@ class MenuBar(QMenuBar):
 		self.save = QAction("Save", self)
 		self.save.setShortcut(QKeySequence.Save)
 		self.save.setToolTip("Save current circuit")
-		self.save.triggered.connect(self.save_dialog)
+		self.save.triggered.connect(partial(self.save_dialog, True))
+
+		self.saveas = QAction("Save As", self)
+		self.saveas.setShortcuts((Qt.CTRL | Qt.SHIFT | Qt.Key_S, QKeySequence.SaveAs))
+		self.saveas.setToolTip("Save current circuit")
+		self.saveas.triggered.connect(self.save_dialog)
 
 		self.open = QAction("Open", self)
 		self.open.setShortcut(QKeySequence.Open)
@@ -132,14 +152,15 @@ class MenuBar(QMenuBar):
 		self.open.triggered.connect(self.open_dialog)
 
 		self.exit = QAction("Exit", self)
-		self.exit.setShortcut(QKeySequence.Quit)
+		self.exit.setShortcuts((Qt.CTRL | Qt.Key_Q, QKeySequence.Quit))
 		self.exit.setToolTip("Exit application")
-		self.exit.triggered.connect(qApp.quit)
+		self.exit.triggered.connect(self.quit)
 
 		self.file = self.addMenu("File")
 		self.file.addAction(self.new)
 		self.file.addSeparator()
 		self.file.addAction(self.save)
+		self.file.addAction(self.saveas)
 		self.file.addAction(self.open)
 		self.file.addSeparator()
 		self.file.addAction(self.exit)
@@ -167,8 +188,10 @@ class MenuBar(QMenuBar):
 
 	def new_dialog(self):
 		size, ok = QInputDialog.getInt(self.parent(), "Size", "Set circuit size", len(glob.circuit), 1)
-		if ok:
+		if ok and self.unsaved_dialog():
+			self.parent().set_file(None)
 			self.parent().canvas.scene.new(size)
+			self.parent().setWindowModified(False)
 
 	def input_dialog(self):
 		while True:
@@ -184,15 +207,47 @@ class MenuBar(QMenuBar):
 				except ValueError:
 					QMessageBox.warning(self, "Illegal Value", "Only binary values are allowed.")
 
-	def save_dialog(self):
-		fname, _ = QFileDialog.getSaveFileName(self.parent(), "Save", "../Resources/Saved/", "Circuits (*.cir)")
-		if fname:
-			self.parent().canvas.scene.save(fname)
+	def save_dialog(self, use_current=False):
+		fname = self.parent().current_file()
+		if not use_current or not fname:
+			fname, _ = QFileDialog.getSaveFileName(self.parent(), "Save", "../Resources/Saved/", "Circuits (*.cir)")
+		if not fname:
+			return QMessageBox.Cancel
+
+		self.parent().canvas.scene.save(fname)
+		self.parent().set_file(fname)
+		self.parent().setWindowModified(False)
+		return QMessageBox.Save
 
 	def open_dialog(self):
 		fname, _ = QFileDialog.getOpenFileName(self.parent(), "Open", "../Resources/Saved/", "Circuits (*.cir)")
-		if fname:
+		if fname and self.unsaved_dialog():
+			self.parent().set_file(fname)
 			self.parent().canvas.scene.load(fname)
+			self.parent().setWindowModified(False)
+
+	def quit(self):
+		if self.unsaved_dialog():
+			qApp.quit()
+
+	def unsaved_dialog(self):
+		if not self.parent().isWindowModified():
+			return True
+
+		dialog = QMessageBox(self.parent())
+		dialog.setWindowTitle("Unsaved Changes")
+		dialog.setText("The circuit has been modified.")
+		dialog.setInformativeText("Do you want to save your changes?")
+		dialog.setStandardButtons(QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
+		dialog.setDefaultButton(QMessageBox.Save)
+		ret = dialog.exec_()
+
+		if ret & QMessageBox.Save:
+			ret = self.save_dialog(True)
+		if ret & QMessageBox.Cancel:
+			return False
+
+		return True
 
 
 class BuildToolBar(PanelToolBar):
