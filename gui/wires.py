@@ -62,6 +62,19 @@ def spline(d):
 	return path
 
 
+def rect(start, end):
+	delta = end - start
+	dist = math.sqrt(delta.x() ** 2 + delta.y() ** 2)
+	offset = max(min(WIRE_MIN_CP_OFFSET * dist, WIRE_CURVE * UNIT), WIRE_MIN_SPECIAL_OFFSET * UNIT)
+	mid_y = (start.y() + end.y()) / 2
+
+	min_x = min(start.x(), end.x()) - offset
+	min_y = min(start.y(), end.y(), mid_y - offset) - offset
+	max_x = max(start.x(), end.x()) + offset
+	max_y = max(start.y(), end.y(), mid_y + offset) + offset
+	return QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
+
+
 class WireItem(QGraphicsPathItem):
 	def __init__(self, wire, start, end, *args):
 		super().__init__(*args)
@@ -209,20 +222,7 @@ class WireItem(QGraphicsPathItem):
 
 	def boundingRect(self):
 		if self._rect is None:
-			start = self.start.center_scene_pos()
-			end = self.end.center_scene_pos()
-
-			delta = end - start
-			dist = math.sqrt(delta.x() ** 2 + delta.y() ** 2)
-			offset = min(WIRE_MIN_CP_OFFSET * dist, WIRE_CURVE * UNIT)
-			mid_y = (start.y() + end.y()) / 2
-
-			min_x = min(start.x(), end.x()) - offset
-			min_y = min(start.y(), end.y(), mid_y - offset/2) - offset
-			max_x = max(start.x(), end.x()) + offset
-			max_y = max(start.y(), end.y(), mid_y + offset/2) + offset
-			self._rect = QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
-
+			self._rect = rect(self.start.center_scene_pos(), self.end.center_scene_pos())
 		return self._rect
 
 	def paint(self, qp, option, *args):
@@ -269,18 +269,5 @@ class PartialWireItem(QGraphicsPathItem):
 
 	def boundingRect(self):
 		if self._rect is None:
-			start = self.start.center_scene_pos()
-			end = self.end
-
-			delta = end - start
-			dist = math.sqrt(delta.x() ** 2 + delta.y() ** 2)
-			offset = min(WIRE_MIN_CP_OFFSET * dist, WIRE_CURVE * UNIT)
-			mid_y = (start.y() + end.y()) / 2
-
-			min_x = min(start.x(), end.x()) - offset
-			min_y = min(start.y(), end.y(), mid_y - offset/2) - offset
-			max_x = max(start.x(), end.x()) + offset
-			max_y = max(start.y(), end.y(), mid_y + offset/2) + offset
-			self._rect = QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
-
+			self._rect = rect(self.start.center_scene_pos(), self.end)
 		return self._rect
