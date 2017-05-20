@@ -84,12 +84,12 @@ def Shor(N):
                 
             h=c.add_gate(H,q//2) 
             c.add_wires(c, [i for i in range(0,q//2)], h, [i for i in range(0,q//2)])
-            u=c.add(Gate(U,'U'))
+            u=c.add(Gate(U,'U',True))
             c.add_wires(h, [i for i in range(0,q//2)], u, [i for i in range(0,q//2)]) 
             c.add_wires(c, [i for i in range(q//2,q)], u, [i for i in range(q//2,q)])
             c.add_wires(u, [i for i in range(q//2,q)], c, [i for i in range(q//2,q)])
             QFT=Matrix.QFT(q//2)
-            qft=c.add(Gate(QFT,'QFT'))
+            qft=c.add(Gate(QFT,'QFT', True))
             c.add_wires(u, [i for i in range(0,q//2)], qft, [i for i in range(0,q//2)])
             c.add_wires(qft, [i for i in range(0,q//2)], c, [i for i in range(0,q//2)])
             
@@ -121,10 +121,11 @@ def Shor(N):
                 N=N//(M2)
             
     return sez   
-                   
-f = open('tests.txt', 'w')
-for n in range(2,32):
-    f.write('Prime factors of '+str(n)+':'+str(Shor(n))+'\n')    
 
-f.close()
+def Shor_test(numbers):                   
+    f = open('tests.txt', 'w')
+    for n in range(2,numbers):
+        f.write('Prime factors of '+str(n)+':'+str(Shor(n))+'\n')    
+    
+    f.close()
         

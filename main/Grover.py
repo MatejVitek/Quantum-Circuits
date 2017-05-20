@@ -35,13 +35,13 @@ c.add_wires(c, (), h1, ())
 
 times=int((pi/4)*sqrt(2**n)) #number of times the Grover iteration will be performed
 for t in range(times):
-    u1=c.add(Gate(F,'f'+str(t)))
+    u1=c.add(Gate(F,'f'+str(t),True))
     c.add_wires(h1, (), u1, ())
-    h2=c.add(Gate(tensor([Matrix.H(n),Matrix.Id(2)]),'h1'+str(t)))
+    h2=c.add(Gate(tensor([Matrix.H(n),Matrix.Id(2)]),'h1'+str(t),True))
     c.add_wires(u1, (), h2, ())
-    u2=c.add(Gate(U,'u0'+str(t)))
+    u2=c.add(Gate(U,'u0'+str(t),True))
     c.add_wires(h2, (), u2, ())
-    h3=c.add(Gate(tensor([Matrix.H(n),Matrix.Id(2)]),'h2'+str(t)))
+    h3=c.add(Gate(tensor([Matrix.H(n),Matrix.Id(2)]),'h2'+str(t),True))
     c.add_wires(u2, (), h3, ())
     h1=h3
 

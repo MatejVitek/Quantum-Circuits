@@ -263,6 +263,9 @@ class Circuit(object):
                     startqbits=[str(wire.value) for wire in gate.in_wires]
                     i=int('0b'+(''.join(startqbits)),2)
                     j=int('0b'+(''.join(endqbits)),2)
+                    if gate.matrix[i][j]==0:
+                        prod=0
+                        break
                     prod=prod*(gate.matrix[i][j])
                     
                 Sum+=prod
@@ -445,13 +448,15 @@ class Circuit(object):
 class Gate(object):
     SIZE = 1
 
-    def __init__(self, mtrx, name):
-        if len(mtrx)!=len(mtrx.rows[0]):
-            raise RuntimeError("Gates should be represented by square matrices.")
-        if not mtrx.isUnitary():
-            raise RuntimeError("Gates should be represented by unitary matrices.")
-        if modf(log(len(mtrx),2))[0] !=0: 
-            raise RuntimeError("Invalid gate dimension.")
+    def __init__(self, mtrx, name, bypass_error_check=False):
+        if not bypass_error_check:
+            if len(mtrx)!=len(mtrx.rows[0]):
+                raise RuntimeError("Gates should be represented by square matrices.")
+            if not mtrx.isUnitary():
+                raise RuntimeError("Gates should be represented by unitary matrices.")
+            if modf(log(len(mtrx),2))[0] !=0: 
+                raise RuntimeError("Invalid gate dimension.")
+                
         size=int(log(len(mtrx),2))
 
         self.matrix=mtrx
@@ -507,34 +512,34 @@ class Gate(object):
 
 class X(Gate):
     def __init__(self,size=1, name="X"):
-        super().__init__(Matrix.X(size), name)
+        super().__init__(Matrix.X(size), name, True)
 
 class Y(Gate):
     def __init__(self,size=1, name="Y"):
-        super().__init__(Matrix.Y(size), name)
+        super().__init__(Matrix.Y(size), name, True)
 
 class Z(Gate):
     def __init__(self,size=1, name="Z"):
-        super().__init__(Matrix.Z(size), name)
+        super().__init__(Matrix.Z(size), name, True)
 
 class H(Gate):
     def __init__(self,size=1, name="H"):
-        super().__init__(Matrix.H(size), name)
+        super().__init__(Matrix.H(size), name, True)
         
 class SqrtNot(Gate):
     def __init__(self,size=1, name="SqrtNot"):
-        super().__init__(Matrix.SqrtNot(size), name)
+        super().__init__(Matrix.SqrtNot(size), name, True)
         
 class QFT(Gate):
     def __init__(self,size=1, name="QFT"):
-        super().__init__(Matrix.QFT(size), name)
+        super().__init__(Matrix.QFT(size), name, True)
 
 class CNot(Gate):
     SIZE = 2
     def __init__(self, name="CNot"):
-        super().__init__(Matrix.Cnot(), name)
+        super().__init__(Matrix.Cnot(), name, True)
 
 class T(Gate):
     SIZE = 3
     def __init__(self, name="T"):
-        super().__init__(Matrix.T(), name)
+        super().__init__(Matrix.T(), name, True)

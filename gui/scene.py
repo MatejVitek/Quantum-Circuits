@@ -6,6 +6,7 @@ from .wires import WireItem, PartialWireItem
 from .nodes import GateItem, InputItem, OutputItem
 from . import glob
 # from main import Grover
+# from main import Shor_example
 from main.test import create_test_circuit
 
 import pickle
@@ -34,7 +35,7 @@ class Scene(QGraphicsScene):
 		self.gates = None
 		self.new(6, [Qt.black, Qt.red, Qt.blue, Qt.darkGreen, Qt.magenta, Qt.darkCyan])
 		# self.new(create_test_circuit(), [Qt.black, Qt.red, Qt.blue, Qt.darkGreen, Qt.magenta, Qt.darkCyan])
-		# self.new(Grover.c, False)
+		# self.new(Shor_example.c, True)
 
 		self.partial_gate = None
 		self.partial_wire = None
