@@ -60,7 +60,7 @@ class View(QGraphicsView):
 	def mouseReleaseEvent(self, *args):
 		super().mouseReleaseEvent(*args)
 		self.viewport().unsetCursor()
-		self.parent().parent().refresh_panels()
+		self.view_changed.emit()
 
 	def mouseMoveEvent(self, e):
 		super().mouseMoveEvent(e)
@@ -70,6 +70,10 @@ class View(QGraphicsView):
 			self.viewport().unsetCursor()
 			if self.scene().partial_wire is not None:
 				self.scene().partial_wire.update_path(self.mapToScene(e.pos()))
+
+	def keyPressEvent(self, *args):
+		super().keyPressEvent(*args)
+		self.view_changed.emit()
 
 	def dragEnterEvent(self, e):
 		if e.mimeData().hasFormat('application/gate-type'):

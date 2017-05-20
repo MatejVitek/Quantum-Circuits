@@ -265,9 +265,9 @@ class PartialWireItem(QGraphicsPathItem):
 		if self._rect is None:
 			start = self.start.center_scene_pos()
 			end = self.end
-			min_x = (start.x() if start.x() < end.x() else self.end.x()) - R_OFFSET
+			min_x = (start.x() if start.x() < end.x() else self.end.x())
 			min_y = (start.y() if start.y() < end.y() else self.end.y()) - R_OFFSET
-			max_x = (start.x() if start.x() > end.x() else self.end.x()) + R_OFFSET
+			max_x = (start.x() if start.x() > end.x() else self.end.x())
 			max_y = (start.y() if start.y() > end.y() else self.end.y()) + R_OFFSET
 			self._rect = QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
 		return self._rect
