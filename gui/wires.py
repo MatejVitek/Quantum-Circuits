@@ -235,19 +235,20 @@ class WireItem(QGraphicsPathItem):
 
 
 class PartialWireItem(QGraphicsPathItem):
-	def __init__(self, start, *args):
+	def __init__(self, start, reverse, *args):
 		super().__init__(*args)
 		self.start = start
-		self.reverse = False
+		self.end = self.start.center_scene_pos()
+		self.reverse = reverse
 
 		self._rect = None
 		self.setPen(QPen(QBrush(Qt.black), WIDTH))
 
 	def update_path(self, pos):
-		source = self.start.center_scene_pos()
-		if self.reverse:
-			source, pos = pos, source
-		path = path_between(source, pos)
+		start = self.start.center_scene_pos()
+		self.end = pos
+		source, sink = (self.end, start) if self.reverse else (start, self.end)
+		path = path_between(source, sink)
 		self.setPath(path)
 
 	def setPen(self, *args):
@@ -262,5 +263,11 @@ class PartialWireItem(QGraphicsPathItem):
 
 	def boundingRect(self):
 		if self._rect is None:
-			self._rect = self.path().boundingRect()
+			start = self.start.center_scene_pos()
+			end = self.end
+			min_x = (start.x() if start.x() < end.x() else self.end.x()) - R_OFFSET
+			min_y = (start.y() if start.y() < end.y() else self.end.y()) - R_OFFSET
+			max_x = (start.x() if start.x() > end.x() else self.end.x()) + R_OFFSET
+			max_y = (start.y() if start.y() > end.y() else self.end.y()) + R_OFFSET
+			self._rect = QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
 		return self._rect
