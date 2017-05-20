@@ -32,8 +32,9 @@ class Scene(QGraphicsScene):
 		self.input = None
 		self.output = None
 		self.gates = None
-		self.new(create_test_circuit(), [Qt.black, Qt.red, Qt.blue, Qt.darkGreen, Qt.magenta, Qt.darkCyan])
-		# self.new(Grover.c, [])
+		self.new(6, [Qt.black, Qt.red, Qt.blue, Qt.darkGreen, Qt.magenta, Qt.darkCyan])
+		# self.new(create_test_circuit(), [Qt.black, Qt.red, Qt.blue, Qt.darkGreen, Qt.magenta, Qt.darkCyan])
+		# self.new(Grover.c, False)
 
 		self.partial_gate = None
 		self.partial_wire = None
@@ -120,9 +121,7 @@ class Scene(QGraphicsScene):
 				self.partial_wire = None
 
 		elif self.partial_wire is None:
-			self.partial_wire = PartialWireItem(port)
-			if self._invalid(port, None):
-				self.partial_wire.reverse = True
+			self.partial_wire = PartialWireItem(port, self._invalid(port, None))
 			self.addItem(self.partial_wire)
 
 		else:
