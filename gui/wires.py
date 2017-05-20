@@ -12,6 +12,7 @@ WIDTH = 3							# Wire width
 WIRE_CURVE = 1.5					# Controls the wire's curvature: higher = curvier
 WIRE_MIN_CP_OFFSET = 0.5			# Minimum first control point offset for short wires, should be x ∈ (0, 0.5]
 WIRE_MIN_SPECIAL_OFFSET = 0.25		# Minimum offset for backward loops and port avoiding
+R_OFFSET = 15						# Padding for shape and bounding rectangle
 AVOID_PORTS = True					# Should the wires avoid intersecting ports? May trade aesthetics for clarity
 
 
@@ -199,7 +200,7 @@ class WireItem(QGraphicsPathItem):
 		return self._shape
 
 	def _stroke_path(self):
-		pen = QPen(QBrush(Qt.black), self.pen().widthF() + 15, Qt.SolidLine)
+		pen = QPen(QBrush(Qt.black), self.pen().widthF() + R_OFFSET, Qt.SolidLine)
 		stroker = QPainterPathStroker()
 		stroker.setCapStyle(pen.capStyle())
 		stroker.setJoinStyle(pen.joinStyle())
@@ -209,7 +210,13 @@ class WireItem(QGraphicsPathItem):
 
 	def boundingRect(self):
 		if self._rect is None:
-			self._rect = self._stroke_path().boundingRect()
+			start = self.start.center_scene_pos()
+			end = self.end.center_scene_pos()
+			min_x = (start.x() if start.x() < end.x() else end.x()) - R_OFFSET
+			min_y = (start.y() if start.y() < end.y() else end.y()) - R_OFFSET
+			max_x = (start.x() if start.x() > end.x() else end.x()) + R_OFFSET
+			max_y = (start.y() if start.y() > end.y() else end.y()) + R_OFFSET
+			self._rect = QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
 		return self._rect
 
 	def paint(self, qp, option, *args):
