@@ -5,7 +5,7 @@ MIN_GAP = 0.25						# Minimum vertical gap between two gates = MIN_GAP * UNIT
 from .wires import WireItem, PartialWireItem
 from .nodes import GateItem, InputItem, OutputItem
 from . import glob
-#from main import Grover
+# from main import Grover
 from main.test import create_test_circuit
 
 import pickle
@@ -33,7 +33,7 @@ class Scene(QGraphicsScene):
 		self.output = None
 		self.gates = None
 		self.new(create_test_circuit(), [Qt.black, Qt.red, Qt.blue, Qt.darkGreen, Qt.magenta, Qt.darkCyan])
-		#self.new(Grover.c, [])
+		# self.new(Grover.c, [])
 
 		self.partial_gate = None
 		self.partial_wire = None
@@ -69,6 +69,8 @@ class Scene(QGraphicsScene):
 	def save(self, fname):
 		with open(fname, 'wb') as f:
 			pickle.dump(glob.circuit, f)
+			pickle.dump(glob.in_vector.get(), f)
+			pickle.dump(glob.out_vector.get(), f)
 			pickle.dump(glob.wire_colors, f)
 			pickle.dump(self.input.scenePos(), f)
 			pickle.dump(self.output.scenePos(), f)
@@ -77,12 +79,16 @@ class Scene(QGraphicsScene):
 	def load(self, fname):
 		with open(fname, 'rb') as f:
 			circuit = pickle.load(f)
+			in_v = pickle.load(f)
+			out_v = pickle.load(f)
 			colors = pickle.load(f)
 			input_pos = pickle.load(f)
 			output_pos = pickle.load(f)
 			g_pos = pickle.load(f)
 
 		self.new(circuit, colors if colors else False)
+		glob.in_vector.set(in_v)
+		glob.out_vector.set(out_v)
 		self.input.setPos(input_pos)
 		self.output.setPos(output_pos)
 		for g in glob.circuit:
