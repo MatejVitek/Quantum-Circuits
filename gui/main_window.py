@@ -36,10 +36,9 @@ class MainWindow(QMainWindow):
 		self.in_panel = IOToolBar(InputPanel, self)
 		self.out_panel = IOToolBar(OutputPanel, self)
 		scene.new_circuit.connect(self.update_panels)
+		self.canvas.view.view_changed.connect(self.refresh_panels)
 		self.addToolBar(Qt.LeftToolBarArea, self.in_panel)
 		self.addToolBar(Qt.RightToolBarArea, self.out_panel)
-		self.in_panel.hide()
-		self.out_panel.hide()
 
 		self.menu_bar = MenuBar(self)
 		self.setMenuBar(self.menu_bar)
@@ -63,6 +62,14 @@ class MainWindow(QMainWindow):
 	def update_panels(self):
 		self.in_panel.update_panel()
 		self.out_panel.update_panel()
+		self.refresh_panels()
+
+	def refresh_panels(self):
+		self.in_panel.hide()
+		self.out_panel.hide()
+		visible = self.canvas.view.items(self.canvas.view.viewport().rect())
+		self.in_panel.setVisible(self.canvas.scene.input not in visible)
+		self.out_panel.setVisible(self.canvas.scene.output not in visible)
 
 	def run(self):
 		in_v = glob.in_vector.get()

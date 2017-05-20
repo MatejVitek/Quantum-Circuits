@@ -6,10 +6,12 @@ from PyQt5.QtCore import *
 
 
 class View(QGraphicsView):
+	view_changed = pyqtSignal(name='viewChanged')
+
 	def __init__(self, *args):
 		super().__init__(*args)
-		self.center()
 		self.scene().new_circuit.connect(self.center)
+		self.scene().scene_changed.connect(self.view_changed)
 		self.setRenderHint(QPainter.Antialiasing)
 		self.setAcceptDrops(True)
 
@@ -19,21 +21,32 @@ class View(QGraphicsView):
 		self.setDragMode(QGraphicsView.ScrollHandDrag)
 		self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
 
-	def setScene(self, scene):
-		super().setScene(scene)
+	def showEvent(self, *args):
+		super().showEvent(*args)
+		self.center()
+
+	def setScene(self, *args):
+		self.scene().new_circuit.disconnect(self.center)
+		self.scene().scene_changed.disconnect(self.view_changed)
+		super().setScene(*args)
 		self.scene().new_circuit.connect(self.center)
+		self.scene().scene_changed.connect(self.view_changed)
+		self.view_changed.emit()
 
 	def center(self):
 		self.centerOn(self.scene().itemsBoundingRect().center())
+		self.view_changed.emit()
 
 	def fit_to_scene(self):
 		self.fitInView(self.scene().itemsBoundingRect(), Qt.KeepAspectRatio)
+		self.view_changed.emit()
 
 	def wheelEvent(self, e):
 		degrees = e.angleDelta().y() / 8.
 		steps = degrees / 15.
 		scale = 1.1 ** steps
 		self.scale(scale, scale)
+		self.view_changed.emit()
 		e.accept()
 
 	def enterEvent(self, *args):
@@ -47,6 +60,7 @@ class View(QGraphicsView):
 	def mouseReleaseEvent(self, *args):
 		super().mouseReleaseEvent(*args)
 		self.viewport().unsetCursor()
+		self.parent().parent().refresh_panels()
 
 	def mouseMoveEvent(self, e):
 		super().mouseMoveEvent(e)
@@ -56,7 +70,6 @@ class View(QGraphicsView):
 			self.viewport().unsetCursor()
 			if self.scene().partial_wire is not None:
 				self.scene().partial_wire.update_path(self.mapToScene(e.pos()))
-		e.accept()
 
 	def dragEnterEvent(self, e):
 		if e.mimeData().hasFormat('application/gate-type'):
