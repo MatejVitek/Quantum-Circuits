@@ -10,8 +10,7 @@ class View(QGraphicsView):
 
 	def __init__(self, *args):
 		super().__init__(*args)
-		self.scene().new_circuit.connect(self.center)
-		self.scene().scene_changed.connect(self.view_changed)
+		self.connect_signals()
 		self.setRenderHint(QPainter.Antialiasing)
 		self.setAcceptDrops(True)
 
@@ -21,17 +20,24 @@ class View(QGraphicsView):
 		self.setDragMode(QGraphicsView.ScrollHandDrag)
 		self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
 
+		self._changed = False
+
 	def showEvent(self, *args):
 		super().showEvent(*args)
 		self.center()
 
 	def setScene(self, *args):
-		self.scene().new_circuit.disconnect(self.center)
-		self.scene().scene_changed.disconnect(self.view_changed)
+		self.disconnect_signals()
 		super().setScene(*args)
+		self.connect_signals()
+
+	def connect_signals(self):
 		self.scene().new_circuit.connect(self.center)
-		self.scene().scene_changed.connect(self.view_changed)
-		self.view_changed.emit()
+		self.scene().layout_changed.connect(self.view_changed)
+
+	def disconnect_signals(self):
+		self.scene().new_circuit.disconnect(self.center)
+		self.scene().layout_changed.disconnect(self.view_changed)
 
 	def center(self):
 		self.centerOn(self.scene().itemsBoundingRect().center())
@@ -49,18 +55,30 @@ class View(QGraphicsView):
 		self.view_changed.emit()
 		e.accept()
 
-	def enterEvent(self, *args):
-		super().enterEvent(*args)
+	def enterEvent(self, e):
+		super().enterEvent(e)
 		self.viewport().unsetCursor()
 
 	def mousePressEvent(self, *args):
 		super().mousePressEvent(*args)
 		self.viewport().unsetCursor()
+		self._monitor()
 
 	def mouseReleaseEvent(self, *args):
 		super().mouseReleaseEvent(*args)
 		self.viewport().unsetCursor()
-		self.view_changed.emit()
+		if self._changed:
+			self.scene().layout_changed.emit()
+		else:
+			self.view_changed.emit()
+		self.scene().scene_changed.disconnect(self._change)
+
+	def _monitor(self):
+		self._changed = False
+		self.scene().scene_changed.connect(self._change)
+
+	def _change(self):
+		self._changed = True
 
 	def mouseMoveEvent(self, e):
 		super().mouseMoveEvent(e)
@@ -76,6 +94,7 @@ class View(QGraphicsView):
 		self.view_changed.emit()
 
 	def dragEnterEvent(self, e):
+		self._monitor()
 		if e.mimeData().hasFormat('application/gate-type'):
 			gate_type = pickle.loads(e.mimeData().data('application/gate-type'))
 			self.scene().build_gate(self.mapToScene(e.pos()), gate_type)

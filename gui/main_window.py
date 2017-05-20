@@ -47,7 +47,7 @@ class MainWindow(QMainWindow):
 		scene.status.connect(self.statusBar().showMessage)
 
 		self.set_file(None)
-		scene.scene_changed.connect(partial(self.setWindowModified, True))
+		scene.layout_changed.connect(partial(self.setWindowModified, True))
 
 		self.setWindowIcon(QIcon("../Resources/Icon.png"))
 		self.reset_placement()

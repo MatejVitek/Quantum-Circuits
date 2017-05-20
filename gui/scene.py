@@ -19,6 +19,7 @@ from PyQt5.QtCore import *
 class Scene(QGraphicsScene):
 	new_circuit = pyqtSignal(name='newCircuit')
 	circuit_changed = pyqtSignal(name='circuitChanged')
+	layout_changed = pyqtSignal(name='layoutChanged')
 	scene_changed = pyqtSignal(name='sceneChanged')
 	circuit_ok = pyqtSignal(bool, name='circuitOK')
 	status = pyqtSignal(str, name='cycle')
@@ -27,8 +28,9 @@ class Scene(QGraphicsScene):
 		super().__init__(*args)
 
 		self.new_circuit.connect(self.circuit_changed)
-		self.circuit_changed.connect(self.scene_changed)
+		self.circuit_changed.connect(self.layout_changed)
 		self.circuit_changed.connect(self.check_circuit)
+		self.layout_changed.connect(self.scene_changed)
 
 		self.input = None
 		self.output = None
@@ -95,7 +97,7 @@ class Scene(QGraphicsScene):
 		self.output.setPos(output_pos)
 		for g in glob.circuit:
 			self.gates[g].setPos(g_pos[g])
-		self.scene_changed.emit()
+		self.layout_changed.emit()
 
 	def check_circuit(self):
 		self.circuit_ok.emit(glob.circuit.check())
@@ -248,7 +250,7 @@ class Scene(QGraphicsScene):
 
 			x += 2 * UNIT
 
-		self.scene_changed.emit()
+		self.layout_changed.emit()
 
 	def slice_up(self, circuit):
 		remaining = set(circuit.gates)
