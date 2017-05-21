@@ -291,9 +291,9 @@ class Scene(QGraphicsScene):
 				continue
 			weight += 1
 			if w.left is glob.circuit:
-				p += self.input.ports[w.lind].center_scene_pos().y()
+				p += self.input.ports[w.lind].center_scene_pos().y() + ((len(g)-1)/2. - w.rind) * UNIT
 			else:
-				p += self.gates[w.left].out_ports[w.lind].center_scene_pos().y()
+				p += self.gates[w.left].out_ports[w.lind].center_scene_pos().y() + ((len(g)-1)/2. - w.rind) * UNIT
 
 		# ... and the locations of the ports on the output panel, which the gate is connected to (if any).
 		for w in g.out_wires:
@@ -301,7 +301,7 @@ class Scene(QGraphicsScene):
 				continue
 			if w.right is glob.circuit:
 				weight += 1
-				p += self.output.ports[w.rind].center_scene_pos().y()
+				p += self.output.ports[w.rind].center_scene_pos().y() + ((len(g)-1)/2. - w.lind) * UNIT
 
 		# If weight is zero, return a central preferred position and a very small weight to deal with division by 0.
 		if weight == 0:

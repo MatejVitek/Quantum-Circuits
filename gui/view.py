@@ -71,7 +71,10 @@ class View(QGraphicsView):
 			self.scene().layout_changed.emit()
 		else:
 			self.view_changed.emit()
-		self.scene().scene_changed.disconnect(self._change)
+		try:
+			self.scene().scene_changed.disconnect(self._change)
+		except TypeError:
+			pass
 
 	def _monitor(self):
 		self._changed = False
